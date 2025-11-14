@@ -26,11 +26,19 @@ In this repo we provide a streamlined and efficient script for training embeddin
 
 - Setup environment following `requirements.txt`. We note that transformers>=4.51.0 is required for training Qwen3 models.
 - Download data and backbone models from Hugging Face (we use Qwen3 models).
-- Run `tokenize_data_qwen.py` to tokenize the downloaded data
-- Modify model path, data path, and other arguments in `configs/config.json`.
+- Run `tokenize_data_qwen.py` to tokenize the downloaded data for decoder-only models, or `tokenize_data_bert.py` for encoder-only models
+- Modify model path, data path, and other arguments in `configs/config.json` for decoder-only models, or `configs/config_bert.json` for encoder-only models.
 - Start training with `accelerate launch --config_file configs/accelerate_config.yaml run.py --config configs/config.json`.
 
 Note: we recommend setting `num_processes` to 1 in `configs/accelerate_config.yaml` and launch the training code once to generate cache for training data before starting the actual training.
+
+#### Training Encoder-only Models
+
+This repository now supports training both decoder-only models (like Qwen) and encoder-only models (like BERT). To train an encoder-only model:
+
+1. Prepare your encoder model (e.g., BERT-based models) and update the config file to specify `"model_type": "encoder"`
+2. Use `tokenize_data_bert.py` to tokenize your data with appropriate special tokens ([CLS], [SEP])
+3. Run training with the encoder-specific config file
 
 For multi-node training, run on the main node:
 
