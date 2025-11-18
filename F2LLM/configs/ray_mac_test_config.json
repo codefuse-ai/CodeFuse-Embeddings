@@ -1,0 +1,26 @@
+{
+  "model_path": "/Users/zhaojie/Project/CodeFuse-Embeddings/F2LLM/models/bert-base-uncased",
+  "experiment_id": "ray_mac_test",
+  "train_data_path": "/Users/zhaojie/Project/CodeFuse-Embeddings/F2LLM/data_tokenized_bert",
+  "output_dir": "/Users/zhaojie/Project/CodeFuse-Embeddings/F2LLM/output/ray_mac_test",
+  "tb_dir": "/Users/zhaojie/Project/CodeFuse-Embeddings/F2LLM/output/tb/ray_mac_test",
+  "cache_dir": "/Users/zhaojie/Project/CodeFuse-Embeddings/F2LLM/cache/ray_mac_test",
+  "train_batch_size": 2,
+  "checkpointing_steps": 50,
+  "validation_steps": 50,
+  "max_seq_length": 64,
+  "learning_rate": 2e-5,
+  "min_lr": 1e-7,
+  "weight_decay": 0.01,
+  "warmup_steps": 10,
+  "train_epochs": 3,
+  "log_interval": 10,
+  "num_hard_neg": 1,
+  "train_steps": -1,
+  "cluster": {
+    "mode": "auto",
+    "address": "ray://head-node-ip:10001",
+    "num_workers": 4,
+    "num_gpus_per_worker": 2
+  }
+}

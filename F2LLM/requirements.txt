@@ -5,3 +5,5 @@ flash-attn
 torch
 transformers
 tensorboard
+ray[train]
+ray[data]
