@@ -29,6 +29,8 @@ class Args:
     validation_steps: int = 100
     # just placeholder, for logging purpose
     num_processes: int=0
+    # whether to load model files from local only
+    local_files_only: bool = True
 
     def dict(self):
         return asdict(self)

@@ -1,0 +1,20 @@
+# Ray集群配置
+cluster:
+  mode: "auto"  # auto, manual
+  address: "ray://head-node-ip:10001"  # 仅在manual模式下使用
+  num_workers: 4
+  num_gpus_per_worker: 2
+  resources_per_worker:
+    CPU: 2
+    GPU: 2
+  
+# 训练配置
+training:
+  use_gpu: true
+  batch_size_per_worker: 16
+  num_epochs: 2
+  
+# 检查点配置
+checkpoint:
+  frequency: 5000
+  keep_checkpoints_num: 3

@@ -1,0 +1,140 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "f2llm"
+version = "0.1.0"
+description = "F2LLM: A framework for distributed training with Ray"
+authors = [
+    {name = "CodeFuse AI Team"}
+]
+readme = "README.md"
+license = {text = "Apache-2.0"}
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+]
+requires-python = ">=3.10"
+dependencies = [
+    "absl-py==2.3.1",
+    "accelerate==1.11.0",
+    "aiohappyeyeballs==2.6.1",
+    "aiohttp==3.13.2",
+    "aiosignal==1.4.0",
+    "annotated-types==0.7.0",
+    "anyio==4.11.0",
+    "async-timeout==5.0.1",
+    "attrs==25.4.0",
+    "certifi==2025.11.12",
+    "charset-normalizer==3.4.4",
+    "click==8.3.1",
+    "datasets==4.4.1",
+    "deepspeed==0.18.2",
+    "dill==0.4.0",
+    "einops==0.8.1",
+    "exceptiongroup==1.3.0",
+    "filelock==3.20.0",
+    "frozenlist==1.8.0",
+    "fsspec==2025.10.0",
+    "grpcio==1.76.0",
+    "h11==0.16.0",
+    "hf-xet==1.2.0",
+    "hjson==3.1.0",
+    "httpcore==1.0.9",
+    "httpx==0.28.1",
+    "huggingface-hub==0.36.0",
+    "idna==3.11",
+    "jinja2==3.1.6",
+    "joblib==1.5.2",
+    "jsonschema==4.25.1",
+    "jsonschema-specifications==2025.9.1",
+    "markdown==3.10",
+    "markupsafe==3.0.3",
+    "mpmath==1.3.0",
+    "msgpack==1.1.2",
+    "multidict==6.7.0",
+    "multiprocess==0.70.18",
+    "networkx==3.4.2",
+    "ninja==1.13.0",
+    "numpy==2.2.6",
+    "packaging==25.0",
+    "pandas==2.3.3",
+    "pillow==12.0.0",
+    "propcache==0.4.1",
+    "protobuf==6.33.1",
+    "psutil==7.1.3",
+    "py-cpuinfo==9.0.0",
+    "pyarrow==22.0.0",
+    "pydantic==2.12.4",
+    "pydantic-core==2.41.5",
+    "python-dateutil==2.9.0.post0",
+    "pytz==2025.2",
+    "pyyaml==6.0.3",
+    "ray==2.51.1",
+    "referencing==0.37.0",
+    "regex==2025.11.3",
+    "requests==2.32.5",
+    "rpds-py==0.29.0",
+    "safetensors==0.6.2",
+    "scikit-learn==1.7.2",
+    "scipy==1.15.3",
+    "setuptools==80.9.0",
+    "six==1.17.0",
+    "sniffio==1.3.1",
+    "sympy==1.14.0",
+    "tensorboard==2.20.0",
+    "tensorboard-data-server==0.7.2",
+    "tensorboardx==2.6.4",
+    "threadpoolctl==3.6.0",
+    "tokenizers==0.22.1",
+    "torch==2.9.1",
+    "tqdm==4.67.1",
+    "transformers==4.57.1",
+    "typing-extensions==4.15.0",
+    "typing-inspection==0.4.2",
+    "tzdata==2025.2",
+    "urllib3==2.5.0",
+    "werkzeug==3.1.3",
+    "xxhash==3.6.0",
+    "yarl==1.22.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=6.0",
+    "pytest-cov>=2.0",
+]
+
+dev = [
+    "black>=21.0",
+    "flake8>=3.0",
+    "isort>=5.0",
+]
+
+[project.scripts]
+train = "f2llm.run:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["f2llm*"]
+
+[tool.setuptools.package-data]
+"f2llm" = ["*.json", "*.yaml", "*.yml"]
+
+[tool.black]
+line-length = 88
+target-version = ['py38']
+
+[tool.isort]
+profile = "black"
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
