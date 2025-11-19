@@ -65,7 +65,8 @@ def hard_loss(
     ):
 
     if hard_neg_embeddings is None:
-        return 0.0
+        # Return a tensor instead of a float
+        return torch.tensor(0.0, device=query_embeddings.device)
 
     bs = query_embeddings.size(0)
     a_norm = F.normalize(query_embeddings, p=2, dim=-1)
@@ -97,11 +98,19 @@ def validate(args, accelerator, model, valid_loader_dict, criterion, completed_s
                     loss_ls.append(accelerator.gather(loss).float())
         
         accelerator.wait_for_everyone()
-        loss_hard_ls = torch.cat(loss_hard_ls)
-        eval_log_dict[f'{dataset_name}/valid_loss_hard'] = loss_hard_ls.mean()
+        if loss_hard_ls:  # Check if list is not empty
+            # Filter out zero-dimensional tensors
+            loss_hard_ls = [loss for loss in loss_hard_ls if loss.dim() > 0]
+            if loss_hard_ls:  # Check again after filtering
+                loss_hard_ls = torch.cat(loss_hard_ls)
+                eval_log_dict[f'{dataset_name}/valid_loss_hard'] = loss_hard_ls.mean()
         if dataset_name in RETRIEVAL_DATASETS:
-            loss_ls = torch.cat(loss_ls)
-            eval_log_dict[f"{dataset_name}/valid_loss_in_batch"] = loss_ls.mean()
+            if loss_ls:  # Check if list is not empty
+                # Filter out zero-dimensional tensors
+                loss_ls = [loss for loss in loss_ls if loss.dim() > 0]
+                if loss_ls:  # Check again after filtering
+                    loss_ls = torch.cat(loss_ls)
+                    eval_log_dict[f"{dataset_name}/valid_loss_in_batch"] = loss_ls.mean()
     
     eval_log_dict['Avg/retrieval/valid_loss_in_batch'] = torch.tensor([v for k, v in eval_log_dict.items() if k.split('/')[0] in RETRIEVAL_DATASETS and k.endswith('valid_loss_in_batch')]).mean()
     eval_log_dict['Avg/retrieval/valid_loss_hard'] = torch.tensor([v for k, v in eval_log_dict.items() if k.split('/')[0] in RETRIEVAL_DATASETS and k.endswith('valid_loss_hard')]).mean()
@@ -161,7 +170,8 @@ def accelerate_train(args,
                 count_dict[dataset_name] += 1
                 loss_dict[dataset_name] += loss.detach().float()
             else:
-                loss = 0.0
+                # For non-retrieval datasets, create a tensor with gradient information
+                loss = torch.tensor(0.0, device=outputs['query_passage_features'].device, requires_grad=True)
             
             loss_total = loss + loss_hard
 

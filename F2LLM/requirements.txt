@@ -5,3 +5,6 @@ flash-attn
 torch
 transformers
 tensorboard
+scikit-learn
+numpy
+pandas

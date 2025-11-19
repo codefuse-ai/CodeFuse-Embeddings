@@ -38,12 +38,22 @@ def collate_fn(batch_raw):
         2*bs+num_hard_neg*(i-1) - 2*bs+num_hard_neg*i-1: hard neg for sample i (i from 1 to bs)
     '''
     num_hard_neg = 1 if batch_raw[0]['dataset_name'] in CLASSIFICATION_DATASETS else args.num_hard_neg
-    # select args.num_hard_neg hard negatives from a total of 24
-    hard_neg_indices = [0] if num_hard_neg == 1 else random.sample(list(range(24)), num_hard_neg)
+    # select args.num_hard_neg hard negatives from available negatives
+    # First check how many negatives are actually available
+    available_negatives = [i for i in range(1, 25) if f'negative_{i}_input_ids' in batch_raw[0]]
+    if len(available_negatives) == 0:
+        # If no negatives available, use passage as negative
+        hard_neg_indices = [0]  # This will duplicate the passage as negative
+    elif num_hard_neg == 1:
+        hard_neg_indices = [available_negatives[0]]
+    else:
+        # Sample from available negatives, or repeat if not enough
+        hard_neg_indices = available_negatives[:num_hard_neg] if len(available_negatives) >= num_hard_neg else (available_negatives * ((num_hard_neg // len(available_negatives)) + 1))[:num_hard_neg]
+    
     input_ids = _stack(
         [s['query_input_ids'] for s in batch_raw]+\
         [s['passage_input_ids'] for s in batch_raw]+\
-        [s[f'negative_{i+1}_input_ids'] for s in batch_raw for i in hard_neg_indices],
+        [s[f'negative_{i+1}_input_ids'] if i < len(available_negatives) else s['passage_input_ids'] for s in batch_raw for i in hard_neg_indices],
         args.max_seq_length
     )
     seqlens = torch.tensor([ids.size(0) for ids in input_ids])
@@ -70,6 +80,13 @@ for f in sorted(os.listdir(args.train_data_path)):
     valid_datasets.append((dataset_name, dataset['test']))
 
 tokenizer = AutoTokenizer.from_pretrained(args.model_path)
+
+# For encoder models, ensure [CLS] token is available
+if args.model_type == 'encoder' or (args.model_type == 'auto' and 'bert' in args.model_path.lower()):
+    if tokenizer.cls_token is None:
+        tokenizer.add_special_tokens({'cls_token': '[CLS]'})
+    if tokenizer.sep_token is None:
+        tokenizer.add_special_tokens({'sep_token': '[SEP]'})
 
 train_loaders = {
     name: DataLoader(ds, shuffle=True, batch_size=args.train_batch_size, collate_fn=collate_fn)
@@ -134,7 +151,9 @@ lr_scheduler = get_scheduler("cosine",
                             num_warmup_steps=args.warmup_steps,
                             num_training_steps=args.train_steps)
 
-AcceleratorState().deepspeed_plugin.deepspeed_config['train_micro_batch_size_per_gpu'] = args.train_batch_size
+# Only set deepspeed config if deepspeed is enabled
+if AcceleratorState().deepspeed_plugin is not None:
+    AcceleratorState().deepspeed_plugin.deepspeed_config['train_micro_batch_size_per_gpu'] = args.train_batch_size
 model.lm, optimizer, lr_scheduler = accelerator.prepare(
     model.lm, optimizer, lr_scheduler
 )
@@ -150,4 +169,4 @@ accelerator.print(f"******************************** Training step after prepare
 
 
 accelerate_train(args, accelerator, model, train_dataloader, valid_loaders,
-                 optimizer, lr_scheduler, len(dataset))
+                 optimizer, lr_scheduler, sum(len(ds) for _, ds in train_datasets))
