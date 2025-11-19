@@ -23,6 +23,21 @@ export TOKENIZERS_PARALLELISM=false
 export TORCH_DISTRIBUTED_ELASTIC_LOG_LEVEL=ERROR
 ```
 
+### 1.3 虚拟环境激活
+
+确保在正确的项目目录中激活虚拟环境，以避免虚拟环境路径不匹配警告：
+
+```bash
+cd /Users/zhaojie/Project/CodeFuse-Embeddings/F2LLM
+source .venv/bin/activate
+```
+
+如果使用`uv`工具，可以使用`--active`参数来明确指定使用当前激活的环境：
+
+```bash
+uv pip install --active <package_name>
+```
+
 ## 2. 单机训练部署方式
 
 ### 2.1 CPU训练
@@ -308,19 +323,29 @@ Ray分布式训练使用两种不同的检查点机制，它们的存储位置�
 
 ```bash
 # 从指定step检查点恢复训练
-PYTHONPATH=. uv run python scripts/ray_train.py --config configs/ray_cpu_test_config.json --num-workers 1 --resume-from-checkpoint --resume-checkpoint-path output/ray_cpu_test/ray_cpu_test/step_10
+PYTHONPATH=. uv run python scripts/ray_train.py --config configs/ray_cpu_test_config.json --num-workers 1 --resume-from-checkpoint --resume-checkpoint-path /Users/zhaojie/Project/CodeFuse-Embeddings/F2LLM/output/ray_cpu_test/ray_cpu_test/step_10
 
 # 从指定epoch检查点恢复训练
-PYTHONPATH=. uv run python scripts/ray_train.py --config configs/ray_cpu_test_config.json --num-workers 1 --resume-from-checkpoint --resume-checkpoint-path output/ray_cpu_test/ray_cpu_test/epoch_1
+PYTHONPATH=. uv run python scripts/ray_train.py --config configs/ray_cpu_test_config.json --num-workers 1 --resume-from-checkpoint --resume-checkpoint-path /Users/zhaojie/Project/CodeFuse-Embeddings/F2LLM/output/ray_cpu_test/ray_cpu_test/epoch_1
 
 # GPU训练从step检查点恢复
-PYTHONPATH=. uv run python scripts/ray_train.py --config configs/ray_mac_test_config.json --num-workers 1 --use-gpu --resume-from-checkpoint --resume-checkpoint-path output/ray_mac_test/ray_mac_test/step_50
+PYTHONPATH=. uv run python scripts/ray_train.py --config configs/ray_mac_test_config.json --num-workers 1 --use-gpu --resume-from-checkpoint --resume-checkpoint-path /Users/zhaojie/Project/CodeFuse-Embeddings/F2LLM/output/ray_mac_test/ray_mac_test/step_50
 
 # GPU训练从epoch检查点恢复
-PYTHONPATH=. uv run python scripts/ray_train.py --config configs/ray_mac_test_config.json --num-workers 1 --use-gpu --resume-from-checkpoint --resume-checkpoint-path output/ray_mac_test/ray_mac_test/epoch_2
+PYTHONPATH=. uv run python scripts/ray_train.py --config configs/ray_mac_test_config.json --num-workers 1 --use-gpu --resume-from-checkpoint --resume-checkpoint-path /Users/zhaojie/Project/CodeFuse-Embeddings/F2LLM/output/ray_mac_test/ray_mac_test/epoch_2
 ```
 
-### 8.4 查找可用检查点
+### 8.4 灵活配置检查点路径
+
+为了提高灵活性，系统支持两种方式指定检查点路径：
+
+1. **命令行参数方式（推荐）**：使用`--resume-checkpoint-path`参数直接在命令行中指定检查点路径，这种方式最为灵活，可以随时更改检查点路径而无需修改配置文件。
+
+2. **配置文件方式**：在配置文件中添加`resume_checkpoint_path`字段来指定检查点路径。
+
+当同时使用两种方式时，命令行参数的优先级更高，会覆盖配置文件中的设置。
+
+### 8.5 查找可用检查点
 
 在恢复训练前，首先需要找到可用的检查点：
 
@@ -346,7 +371,7 @@ ls -la ~/ray_results/
 - 如果需要更精细的恢复点，可以选择step检查点
 - 如果希望按完整的训练轮次恢复，可以选择epoch检查点
 
-### 8.5 恢复训练示例
+### 8.6 恢复训练示例
 
 1. 从step检查点恢复训练示例：
 假设训练在第50步中断，可以从该检查点恢复训练：
@@ -356,7 +381,7 @@ ls -la ~/ray_results/
 ls -la output/ray_cpu_test/ray_cpu_test/step_*/
 
 # 从第50步检查点恢复训练
-PYTHONPATH=. uv run python scripts/ray_train.py --config configs/ray_cpu_test_config.json --num-workers 1 --resume-from-checkpoint --resume-checkpoint-path output/ray_cpu_test/ray_cpu_test/step_50
+PYTHONPATH=. uv run python scripts/ray_train.py --config configs/ray_cpu_test_config.json --num-workers 1 --resume-from-checkpoint --resume-checkpoint-path /Users/zhaojie/Project/CodeFuse-Embeddings/F2LLM/output/ray_cpu_test/ray_cpu_test/step_50
 ```
 
 2. 从epoch检查点恢复训练示例：
@@ -367,17 +392,17 @@ PYTHONPATH=. uv run python scripts/ray_train.py --config configs/ray_cpu_test_co
 ls -la output/ray_cpu_test/ray_cpu_test/epoch_*/
 
 # 从第2轮次检查点恢复训练
-PYTHONPATH=. uv run python scripts/ray_train.py --config configs/ray_cpu_test_config.json --num-workers 1 --resume-from-checkpoint --resume-checkpoint-path output/ray_cpu_test/ray_cpu_test/epoch_2
+PYTHONPATH=. uv run python scripts/ray_train.py --config configs/ray_cpu_test_config.json --num-workers 1 --resume-from-checkpoint --resume-checkpoint-path /Users/zhaojie/Project/CodeFuse-Embeddings/F2LLM/output/ray_cpu_test/ray_cpu_test/epoch_2
 ```
 
-### 8.6 注意事项
+### 8.7 注意事项
 
 1. 恢复训练时使用的配置文件应与原始训练保持一致
 2. 恢复训练会继续使用原始训练的学习率调度器状态
 3. 检查点路径应指向包含模型、优化器和调度器状态的目录
 4. 如果检查点路径不存在或损坏，训练将从头开始并记录警告信息
 5. Ray检查点文件存储在用户主目录下的`ray_results`文件夹中，而不是项目目录中
-
+6. 推荐使用命令行参数方式指定检查点路径，以提高灵活性
 ## 9. 性能优化建议
 
 ### 9.1 资源配置优化

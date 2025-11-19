@@ -42,12 +42,12 @@ def load_checkpoint(checkpoint_dir, model, optimizer, lr_scheduler):
     return model
 
 
-def save_ray_checkpoint(args, model, optimizer, lr_scheduler, checkpoint_dir):
+def save_ray_checkpoint(args, model, optimizer, lr_scheduler, checkpoint_dir, completed_steps=0):
     """Save checkpoint using Ray's checkpointing mechanism"""
-    import ray.train
     import os
     import tempfile
     import ray.cloudpickle as pickle
+    import torch
     
     # Create a temporary directory for the checkpoint
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -68,63 +68,159 @@ def save_ray_checkpoint(args, model, optimizer, lr_scheduler, checkpoint_dir):
         with open(args_path, 'wb') as f:
             pickle.dump(args, f)
         
-        # Create Ray checkpoint from directory
-        from ray.train import Checkpoint
-        checkpoint = Checkpoint.from_directory(temp_dir)
+        # Save completed_steps
+        steps_path = os.path.join(temp_dir, 'completed_steps.txt')
+        with open(steps_path, 'w') as f:
+            f.write(str(completed_steps))
         
-        # Report checkpoint to Ray
-        ray.train.report({}, checkpoint=checkpoint)
+        # Copy all files from temp_dir to checkpoint_dir
+        os.makedirs(checkpoint_dir, exist_ok=True)
+        import shutil
+        for file_name in os.listdir(temp_dir):
+            shutil.copy(os.path.join(temp_dir, file_name), os.path.join(checkpoint_dir, file_name))
     
     print(f"Ray checkpoint saved using directory method")
-    return checkpoint
 
 
 def load_ray_checkpoint(checkpoint_dir):
     """Load checkpoint using Ray's checkpointing mechanism"""
-    import ray.train
     import os
     import ray.cloudpickle as pickle
     import torch
     
-    # Load checkpoint from directory
-    checkpoint = ray.train.Checkpoint.from_directory(checkpoint_dir)
+    print(f"DEBUG: Loading checkpoint from directory: {checkpoint_dir}")
+    
+    # First, let's check if the checkpoint_dir exists and what files are in it
+    if os.path.exists(checkpoint_dir):
+        files = os.listdir(checkpoint_dir)
+        print(f"DEBUG: Files in provided checkpoint directory: {files}")
+    else:
+        print(f"DEBUG: Provided checkpoint directory does not exist: {checkpoint_dir}")
+    
+    # Check if we're in a Ray training context
+    in_ray_context = False
+    try:
+        import ray.train
+        in_ray_context = True
+        print("DEBUG: Running in Ray training context")
+    except ImportError:
+        print("DEBUG: Not running in Ray training context")
+        pass
     
     # Get the checkpoint directory
-    with checkpoint.as_directory() as checkpoint_path:
-        # Load model state dict
-        model_path = os.path.join(checkpoint_path, 'model.pth')
-        if os.path.exists(model_path):
-            model_state_dict = torch.load(model_path)
-        else:
-            model_state_dict = None
+    if in_ray_context:
+        # In Ray context, we need to handle the path differently
+        # First, try to use the checkpoint_dir directly
+        checkpoint_directory = checkpoint_dir
+        print(f"DEBUG: In Ray context, using checkpoint directory directly: {checkpoint_directory}")
         
-        # Load optimizer state dict
-        optimizer_path = os.path.join(checkpoint_path, 'optimizer.pth')
-        if os.path.exists(optimizer_path):
-            optimizer_state_dict = torch.load(optimizer_path)
+        # Check if this directory exists
+        if not os.path.exists(checkpoint_directory):
+            # If not, try to find it relative to the project root
+            # Get the project root (assuming we're in F2LLM directory)
+            project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            print(f"DEBUG: Project root: {project_root}")
+            
+            # Try to find the checkpoint directory relative to project root
+            if not os.path.isabs(checkpoint_dir):
+                abs_checkpoint_dir = os.path.join(project_root, "F2LLM", checkpoint_dir)
+                print(f"DEBUG: Trying absolute path: {abs_checkpoint_dir}")
+                if os.path.exists(abs_checkpoint_dir):
+                    checkpoint_directory = abs_checkpoint_dir
+                    print(f"DEBUG: Found checkpoint directory at: {checkpoint_directory}")
+    else:
+        # Use checkpoint_dir directly in non-Ray context (e.g., testing)
+        checkpoint_directory = checkpoint_dir
+        print(f"DEBUG: Using checkpoint directory directly: {checkpoint_directory}")
+    
+    print(f"DEBUG: Final checkpoint directory: {checkpoint_directory}")
+    
+    # Check if the final checkpoint directory exists
+    if not os.path.exists(checkpoint_directory):
+        print(f"DEBUG: Final checkpoint directory does not exist: {checkpoint_directory}")
+        # List files in parent directory to see what's available
+        parent_dir = os.path.dirname(checkpoint_directory)
+        if os.path.exists(parent_dir):
+            files = os.listdir(parent_dir)
+            print(f"DEBUG: Files in parent directory {parent_dir}: {files}")
+    
+    # Load model state dict
+    model_path = os.path.join(checkpoint_directory, 'model.pth')
+    if os.path.exists(model_path):
+        model_state_dict = torch.load(model_path)
+        print(f"DEBUG: Loaded model state dict from {model_path}")
+    else:
+        model_state_dict = None
+        print(f"DEBUG: Model state dict not found at {model_path}")
+    
+    # Load optimizer state dict
+    optimizer_path = os.path.join(checkpoint_directory, 'optimizer.pth')
+    if os.path.exists(optimizer_path):
+        optimizer_state_dict = torch.load(optimizer_path)
+        print(f"DEBUG: Loaded optimizer state dict from {optimizer_path}")
+    else:
+        optimizer_state_dict = None
+        print(f"DEBUG: Optimizer state dict not found at {optimizer_path}")
+    
+    # Load learning rate scheduler state dict
+    lr_scheduler_path = os.path.join(checkpoint_directory, 'lr_scheduler.pth')
+    if os.path.exists(lr_scheduler_path):
+        lr_scheduler_state_dict = torch.load(lr_scheduler_path)
+        print(f"DEBUG: Loaded LR scheduler state dict from {lr_scheduler_path}")
+    else:
+        lr_scheduler_state_dict = None
+        print(f"DEBUG: LR scheduler state dict not found at {lr_scheduler_path}")
+    
+    # Load args
+    args_path = os.path.join(checkpoint_directory, 'args.pkl')
+    if os.path.exists(args_path):
+        with open(args_path, 'rb') as f:
+            args = pickle.load(f)
+        print(f"DEBUG: Loaded args from {args_path}")
+    else:
+        args = None
+        print(f"DEBUG: Args not found at {args_path}")
+    
+    # Load completed_steps
+    steps_path = os.path.join(checkpoint_directory, 'completed_steps.txt')
+    print(f"DEBUG: Looking for completed_steps.txt at: {steps_path}")
+    if os.path.exists(steps_path):
+        with open(steps_path, 'r') as f:
+            content = f.read().strip()
+            print(f"DEBUG: Read content from completed_steps.txt: '{content}'")
+            # Handle case where content might contain progress bar output like "10%"
+            if '%' in content:
+                # Extract the numeric part before the %
+                try:
+                    completed_steps = int(content.split('%')[0])
+                    print(f"DEBUG: Extracted completed_steps from percentage: {completed_steps}")
+                except ValueError as e:
+                    print(f"DEBUG: Failed to extract completed_steps from percentage: {e}")
+                    completed_steps = 0
+            else:
+                # Normal case - just a number
+                try:
+                    completed_steps = int(content)
+                    print(f"DEBUG: Read completed_steps directly: {completed_steps}")
+                except ValueError as e:
+                    print(f"DEBUG: Failed to read completed_steps directly: {e}")
+                    completed_steps = 0
+    else:
+        print(f"DEBUG: completed_steps.txt not found at {steps_path}")
+        # Let's check what files are actually in the directory
+        if os.path.exists(checkpoint_directory):
+            files = os.listdir(checkpoint_directory)
+            print(f"DEBUG: Files in checkpoint directory: {files}")
         else:
-            optimizer_state_dict = None
-        
-        # Load learning rate scheduler state dict
-        lr_scheduler_path = os.path.join(checkpoint_path, 'lr_scheduler.pth')
-        if os.path.exists(lr_scheduler_path):
-            lr_scheduler_state_dict = torch.load(lr_scheduler_path)
-        else:
-            lr_scheduler_state_dict = None
-        
-        # Load args
-        args_path = os.path.join(checkpoint_path, 'args.pkl')
-        if os.path.exists(args_path):
-            with open(args_path, 'rb') as f:
-                args = pickle.load(f)
-        else:
-            args = None
+            print(f"DEBUG: Checkpoint directory does not exist: {checkpoint_directory}")
+        completed_steps = 0
     
     checkpoint_data = {
         "model_state_dict": model_state_dict,
         "optimizer_state_dict": optimizer_state_dict,
         "lr_scheduler_state_dict": lr_scheduler_state_dict,
-        "args": args
+        "args": args,
+        "completed_steps": completed_steps
     }
     
     print(f"Ray checkpoint loaded from {checkpoint_dir}")
@@ -217,11 +313,13 @@ def ray_train(args,
               valid_loader_dict,
               optimizer,
               lr_scheduler,
-              num_train_samples):
+              num_train_samples,
+              start_steps=0):
     print("**************************************** Start training ****************************************")
     print(f" Num train samples = {num_train_samples}")
     print(f" Num epochs = {args.train_epochs}")
     print(f" Per device batch size = {args.train_batch_size}")
+    print(f" Starting from step = {start_steps}")  # 添加调试日志
     
     # Calculate global batch size
     import ray
@@ -244,7 +342,11 @@ def ray_train(args,
     summary_writer = SummaryWriter(log_dir=args.tb_dir)
     criterion = CrossEntropyLoss(reduction='none')
     pbar = tqdm(range(args.train_steps))
-    completed_steps = 0
+    # 将进度条的初始位置设置为start_steps
+    pbar.update(min(start_steps, args.train_steps))
+    print(f" Progress bar updated to step = {min(start_steps, args.train_steps)}")  # 添加调试日志
+    completed_steps = start_steps
+    print(f" Internal completed_steps set to = {completed_steps}")  # 添加调试日志
     loss_dict = {ds_name: torch.tensor(0.0) for ds_name in RETRIEVAL_DATASETS}
     loss_hard_dict = {ds_name: torch.tensor(0.0) for ds_name in train_dataloader.loader_dict.keys()}
     count_dict = {ds_name: torch.tensor(0) for ds_name in RETRIEVAL_DATASETS}
@@ -285,6 +387,7 @@ def ray_train(args,
             
             # log
             completed_steps += 1
+            print(f" Processing step = {completed_steps}")  # 添加调试日志
             if completed_steps % args.log_interval == 0:
                 pbar.update(min(args.log_interval, args.train_steps - pbar.n))
 
@@ -322,7 +425,7 @@ def ray_train(args,
                 
                 # Save Ray checkpoint
                 try:
-                    save_ray_checkpoint(args, model, optimizer, lr_scheduler, output_dir)
+                    save_ray_checkpoint(args, model, optimizer, lr_scheduler, output_dir, completed_steps)
                 except Exception as e:
                     print(f"Failed to save Ray checkpoint: {e}")
 
@@ -335,7 +438,7 @@ def ray_train(args,
         
         # Save Ray checkpoint
         try:
-            save_ray_checkpoint(args, model, optimizer, lr_scheduler, output_dir)
+            save_ray_checkpoint(args, model, optimizer, lr_scheduler, output_dir, completed_steps)
         except Exception as e:
             print(f"Failed to save Ray checkpoint: {e}")
             

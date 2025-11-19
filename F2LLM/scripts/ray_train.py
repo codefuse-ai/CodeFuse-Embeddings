@@ -153,13 +153,24 @@ def train_func(config):
     from torch.optim import AdamW
     import ray
     from ray.train import get_context
-    import torch.distributed as dist
     import torch
     
+    # Import load_ray_checkpoint function
+    from ray_utils import load_ray_checkpoint
+    
     # Convert config to Args object
-    args = Args(**config)
+    # Remove resume_from_checkpoint and resume_checkpoint_path from config before creating Args object
+    config_copy = config.copy()
+    resume_from_checkpoint = config_copy.pop('resume_from_checkpoint', False)
+    resume_checkpoint_path = config_copy.pop('resume_checkpoint_path', None)
+    
+    args = Args(**config_copy)
     args.output_dir = f"{args.output_dir}/{args.experiment_id}"
     args.tb_dir = f"{args.tb_dir}/{args.experiment_id}"
+    
+    # Add resume parameters to args object
+    args.resume_from_checkpoint = resume_from_checkpoint
+    args.resume_checkpoint_path = resume_checkpoint_path
     
     # Set seed for reproducibility
     set_seed(0)
@@ -217,18 +228,34 @@ def train_func(config):
                                 num_training_steps=args.train_steps)
     
     # Resume from checkpoint if specified
-    if hasattr(args, 'resume_from_checkpoint') and args.resume_from_checkpoint and hasattr(args, 'resume_checkpoint_path') and args.resume_checkpoint_path:
-        try:
-            checkpoint_data = load_ray_checkpoint(args.resume_checkpoint_path)
-            if checkpoint_data["model_state_dict"]:
-                model.lm.load_state_dict(checkpoint_data["model_state_dict"])
-            if checkpoint_data["optimizer_state_dict"]:
-                optimizer.load_state_dict(checkpoint_data["optimizer_state_dict"])
-            if checkpoint_data["lr_scheduler_state_dict"]:
-                lr_scheduler.load_state_dict(checkpoint_data["lr_scheduler_state_dict"])
-            logger.info(f"Resumed training from checkpoint: {args.resume_checkpoint_path}")
-        except Exception as e:
-            logger.error(f"Failed to resume from checkpoint: {e}")
+    start_steps = 0
+    logger.info(f"Checking resume from checkpoint: resume_from_checkpoint={getattr(args, 'resume_from_checkpoint', None)}, resume_checkpoint_path={getattr(args, 'resume_checkpoint_path', None)}")
+    if hasattr(args, 'resume_from_checkpoint') and args.resume_from_checkpoint:
+        # Use checkpoint path from command line argument first, then fallback to config
+        checkpoint_path = getattr(args, 'resume_checkpoint_path', None) or config.get('resume_checkpoint_path', None)
+        if checkpoint_path:
+            try:
+                logger.info(f"Attempting to load checkpoint from: {checkpoint_path}")
+                
+                checkpoint_data = load_ray_checkpoint(checkpoint_path)
+                if checkpoint_data["model_state_dict"]:
+                    model.lm.load_state_dict(checkpoint_data["model_state_dict"])
+                if checkpoint_data["optimizer_state_dict"]:
+                    optimizer.load_state_dict(checkpoint_data["optimizer_state_dict"])
+                if checkpoint_data["lr_scheduler_state_dict"]:
+                    lr_scheduler.load_state_dict(checkpoint_data["lr_scheduler_state_dict"])
+                # 获取保存的步骤数
+                if "completed_steps" in checkpoint_data:
+                    start_steps = checkpoint_data["completed_steps"]
+                logger.info(f"Resumed training from checkpoint: {checkpoint_path} at step {start_steps}")
+            except Exception as e:
+                logger.error(f"Failed to resume from checkpoint: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
+        else:
+            logger.warning("Resume from checkpoint requested but no checkpoint path provided")
+    else:
+        logger.info("Not resuming from checkpoint")
     
     # Prepare model for distributed training
     if use_gpu and local_world_size > 1:
@@ -270,7 +297,7 @@ def train_func(config):
     # accelerate_train(args, None, model, train_dataloader, valid_loaders,
     #                  optimizer, lr_scheduler, num_train_samples)
     ray_train(args, model, train_dataloader, valid_loaders,
-              optimizer, lr_scheduler, num_train_samples)
+              optimizer, lr_scheduler, num_train_samples, start_steps)
 
 
 def main():
@@ -290,6 +317,10 @@ def main():
     # Parse the config file
     with open(args.config) as f:
         config = json.load(f)
+    
+    # Add command line arguments to config so they are available in train_func
+    config['resume_from_checkpoint'] = args.resume_from_checkpoint
+    config['resume_checkpoint_path'] = args.resume_checkpoint_path
     
     # Initialize Ray cluster with runtime environment to exclude large files
     if args.cluster_mode == "manual" and args.cluster_address:
