@@ -121,6 +121,11 @@ if args.train_steps < 0:
 accelerator.print(f"******************************** Training step before prepare: {args.train_steps} ********************************")
 model = F2LLM(args.model_path, args.max_seq_length, args=args)
 model.lm.gradient_checkpointing_enable()
+model_embedding_dim = model.lm.config.hidden_size
+if any(d > model_embedding_dim for d in args.matryoshka_dims):
+    raise ValueError(
+        f"Dimensions in matryoshka_dims cannot exceed the model's embedding dimension of {model_embedding_dim}."
+    )
 # set seed again to make sure that different models share the same seed
 set_seed(0)
 
