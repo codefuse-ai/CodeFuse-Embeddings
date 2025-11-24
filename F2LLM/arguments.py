@@ -28,7 +28,8 @@ class Args:
     checkpointing_steps: int = 100
     validation_steps: int = 100
     # just placeholder, for logging purpose
-    num_processes: int=0
+    num_processes: int = 0
+    finetuning_type: str = "full"
 
     def dict(self):
         return asdict(self)

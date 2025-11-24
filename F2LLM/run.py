@@ -14,6 +14,7 @@ import torch
 from torch.nn.utils.rnn import pad_sequence
 from torch.optim import AdamW
 from model import F2LLM
+from peft import LoraConfig, get_peft_model, TaskType
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -120,14 +121,35 @@ if args.train_steps < 0:
 
 accelerator.print(f"******************************** Training step before prepare: {args.train_steps} ********************************")
 model = F2LLM(args.model_path, args.max_seq_length, args=args)
+if not hasattr(model.lm, 'prepare_inputs_for_generation'):
+    model.lm.prepare_inputs_for_generation = lambda *args, **kwargs: None
+
 model.lm.gradient_checkpointing_enable()
 # set seed again to make sure that different models share the same seed
 set_seed(0)
 
-optimizer = AdamW(model.lm.parameters(),
-                  weight_decay=args.weight_decay,
-                  lr=args.learning_rate,
-                  betas=(0.9, 0.98))
+if args.finetuning_type == 'lora':
+    lora_config = LoraConfig(
+        task_type=TaskType.CAUSAL_LM,
+        r=16,
+        lora_alpha=32,
+        lora_dropout=0.1,
+        target_modules=["q_proj", "v_proj"],
+    )
+    model.lm = get_peft_model(model.lm, lora_config)
+    if accelerator.is_main_process:
+        model.lm.print_trainable_parameters()
+    if hasattr(model.lm, "enable_input_require_grads"):
+        model.lm.enable_input_require_grads()
+    optimizer = AdamW(filter(lambda p: p.requires_grad, model.lm.parameters()),
+                      weight_decay=args.weight_decay,
+                      lr=args.learning_rate,
+                      betas=(0.9, 0.98))
+else:
+    optimizer = AdamW(model.lm.parameters(),
+                      weight_decay=args.weight_decay,
+                      lr=args.learning_rate,
+                      betas=(0.9, 0.98))
 
 lr_scheduler = get_scheduler("cosine",
                             optimizer=optimizer,
