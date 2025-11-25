@@ -91,17 +91,31 @@ def validate(args, accelerator, model, valid_loader_dict, criterion, completed_s
             with torch.no_grad():
                 outputs = model.forward(batch)
                 loss_hard = hard_loss(outputs['query_passage_features'].squeeze(1), outputs['passage_passage_features'].squeeze(1), outputs['negative_passage_features'], criterion, accelerator)
-                loss_hard_ls.append(accelerator.gather(loss_hard).float())
+                loss_hard = accelerator.gather(loss_hard).float()
+                # 确保loss_hard是至少一维的张量
+                if loss_hard.dim() == 0:
+                    loss_hard = loss_hard.unsqueeze(0)
+                loss_hard_ls.append(loss_hard)
                 if dataset_name in RETRIEVAL_DATASETS:
                     loss = inbatch_loss(outputs['query_passage_features'].squeeze(1), outputs['passage_passage_features'].squeeze(1), criterion, accelerator)
-                    loss_ls.append(accelerator.gather(loss).float())
+                    loss = accelerator.gather(loss).float()
+                    # 确保loss是至少一维的张量
+                    if loss.dim() == 0:
+                        loss = loss.unsqueeze(0)
+                    loss_ls.append(loss)
         
         accelerator.wait_for_everyone()
-        loss_hard_ls = torch.cat(loss_hard_ls)
-        eval_log_dict[f'{dataset_name}/valid_loss_hard'] = loss_hard_ls.mean()
-        if dataset_name in RETRIEVAL_DATASETS:
+        if loss_hard_ls:
+            loss_hard_ls = torch.cat(loss_hard_ls)
+            eval_log_dict[f'{dataset_name}/valid_loss_hard'] = loss_hard_ls.mean()
+        else:
+            eval_log_dict[f'{dataset_name}/valid_loss_hard'] = torch.tensor(0.0)
+            
+        if dataset_name in RETRIEVAL_DATASETS and loss_ls:
             loss_ls = torch.cat(loss_ls)
             eval_log_dict[f"{dataset_name}/valid_loss_in_batch"] = loss_ls.mean()
+        elif dataset_name in RETRIEVAL_DATASETS:
+            eval_log_dict[f"{dataset_name}/valid_loss_in_batch"] = torch.tensor(0.0)
     
     eval_log_dict['Avg/retrieval/valid_loss_in_batch'] = torch.tensor([v for k, v in eval_log_dict.items() if k.split('/')[0] in RETRIEVAL_DATASETS and k.endswith('valid_loss_in_batch')]).mean()
     eval_log_dict['Avg/retrieval/valid_loss_hard'] = torch.tensor([v for k, v in eval_log_dict.items() if k.split('/')[0] in RETRIEVAL_DATASETS and k.endswith('valid_loss_hard')]).mean()

@@ -1,0 +1,22 @@
+{
+  "model_path": "microsoft/DialoGPT-medium",
+  "model_type": "gpt2",
+  "experiment_id": "gpt-final-fix",
+  "train_data_path": "data_tokenized/data_tokenized_DialoGPT-medium",
+  "output_dir": "output",
+  "tb_dir": "output/tb",
+  "cache_dir": "cache",
+  "train_batch_size": 1,
+  "checkpointing_steps": 10,
+  "validation_steps": 10,
+  "max_seq_length": 128,
+  "learning_rate": 1e-4,
+  "min_lr": 1e-6,
+  "weight_decay": 0.01,
+  "warmup_steps": 5,
+  "train_epochs": 1,
+  "log_interval": 1,
+  "num_hard_neg": 1,
+  "attn_implementation": null,
+  "use_flash_attention": false
+}
