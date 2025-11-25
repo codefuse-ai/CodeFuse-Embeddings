@@ -62,6 +62,8 @@ if accelerator.is_main_process:
 
 train_datasets, valid_datasets = [], []
 for f in sorted(os.listdir(args.train_data_path)):
+    if not f.endswith('.parquet'):  # 只处理parquet文件
+        continue
     dataset_name = f.split('.parquet')[0]
     dataset = load_dataset("parquet", data_files=os.path.join(args.train_data_path, f), cache_dir=args.cache_dir)['train']
     dataset = dataset.add_column("dataset_name", [dataset_name]*len(dataset))
@@ -70,6 +72,16 @@ for f in sorted(os.listdir(args.train_data_path)):
     valid_datasets.append((dataset_name, dataset['test']))
 
 tokenizer = AutoTokenizer.from_pretrained(args.model_path)
+
+# 确保有pad_token
+if tokenizer.pad_token is None:
+    if tokenizer.eos_token is not None:
+        tokenizer.pad_token = tokenizer.eos_token
+    else:
+        # 对于没有eos_token的模型，添加特殊token
+        tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+        # 需要调整模型embedding大小
+        model.lm.resize_token_embeddings(len(tokenizer))
 
 train_loaders = {
     name: DataLoader(ds, shuffle=True, batch_size=args.train_batch_size, collate_fn=collate_fn)
@@ -134,7 +146,10 @@ lr_scheduler = get_scheduler("cosine",
                             num_warmup_steps=args.warmup_steps,
                             num_training_steps=args.train_steps)
 
-AcceleratorState().deepspeed_plugin.deepspeed_config['train_micro_batch_size_per_gpu'] = args.train_batch_size
+# 检查是否使用DeepSpeed
+if accelerator.state.deepspeed_plugin is not None:
+    accelerator.state.deepspeed_plugin.deepspeed_config['train_micro_batch_size_per_gpu'] = args.train_batch_size
+
 model.lm, optimizer, lr_scheduler = accelerator.prepare(
     model.lm, optimizer, lr_scheduler
 )

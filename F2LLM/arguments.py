@@ -27,6 +27,10 @@ class Args:
     log_interval: int = 20
     checkpointing_steps: int = 100
     validation_steps: int = 100
+    # model configuration
+    model_type: str = "auto"  # auto, qwen, llama, baichuan, etc.
+    attn_implementation: str = "flash_attention_2"  # flash_attention_2, sdpa, None
+    use_flash_attention: bool = True
     # just placeholder, for logging purpose
     num_processes: int=0
 
