@@ -1,0 +1,144 @@
+# Ray Distributed Training Configuration
+# This configuration file defines settings for Ray Train distributed training
+
+# =============================================================================
+# Ray Cluster Configuration
+# =============================================================================
+cluster:
+  # Ray cluster address
+  # - "auto": Initialize local Ray cluster automatically
+  # - "ray://<head_ip>:10001": Connect to remote Ray cluster
+  ray_address: "auto"
+
+# =============================================================================
+# Scaling Configuration
+# =============================================================================
+scaling:
+  # Number of training workers (typically equals number of GPUs)
+  num_workers: 8
+
+  # Whether to use GPU for training
+  use_gpu: true
+
+  # Resources allocated per worker
+  resources_per_worker:
+    CPU: 4   # CPU cores per worker
+    GPU: 1   # GPUs per worker (1 for single-GPU workers)
+
+# =============================================================================
+# Training Configuration
+# =============================================================================
+training:
+  # PyTorch distributed backend
+  # - "nccl": For GPU training (recommended)
+  # - "gloo": For CPU training
+  backend: "nccl"
+
+  # DeepSpeed integration
+  use_deepspeed: true
+
+  # DeepSpeed configuration (maps to Accelerate's deepspeed_config)
+  deepspeed_config:
+    # ZeRO optimization configuration
+    zero_optimization:
+      stage: 2  # ZeRO-2 optimization (1, 2, or 3)
+      # Note: ZeRO-3 requires additional memory management
+
+    # Mixed precision training
+    bf16:
+      enabled: true  # Use BFloat16 for mixed precision
+
+    # Gradient configuration
+    gradient_clipping: 1.0
+    gradient_accumulation_steps: 1
+
+    # Batch size per GPU (should match train_batch_size below)
+    train_micro_batch_size_per_gpu: 8
+
+# =============================================================================
+# Fault Tolerance Configuration
+# =============================================================================
+fault_tolerance:
+  # Maximum number of failures before giving up
+  max_failures: 3
+
+  # Number of checkpoints to keep
+  checkpoint_num_to_keep: 3
+
+  # Checkpoint selection criteria
+  checkpoint_score_attribute: "loss"  # Metric to use for checkpoint selection
+  checkpoint_score_order: "min"       # "min" for loss, "max" for accuracy
+
+# =============================================================================
+# Model and Data Configuration
+# =============================================================================
+# Model path (HuggingFace model or local path)
+model_path: "Qwen/Qwen2.5-0.5B"  # Example: change to your model
+
+# Experiment identification
+experiment_id: "ray_f2llm_training"
+
+# Output directories
+output_dir: "./outputs/ray_train"
+tb_dir: "./tensorboard/ray_train"
+cache_dir: "./cache"
+
+# Training data
+train_data_path: "./data/train"
+
+# =============================================================================
+# Training Hyperparameters
+# =============================================================================
+# Batch size per device
+train_batch_size: 8
+
+# Maximum sequence length
+max_seq_length: 2048
+
+# Optimizer settings
+learning_rate: 1.0e-4
+min_lr: 1.0e-6
+weight_decay: 0.01
+
+# Learning rate schedule
+warmup_steps: 100
+
+# Embedding training settings
+num_hard_neg: 7  # Number of hard negatives per sample
+
+# Training duration
+# train_steps: -1 means use train_epochs instead
+train_steps: -1
+train_epochs: 5
+
+# Logging and checkpointing
+log_interval: 20          # Log every N steps
+checkpointing_steps: 100  # Save checkpoint every N steps
+validation_steps: 100     # Run validation every N steps
+
+# =============================================================================
+# Notes and Tips
+# =============================================================================
+# 1. For single-node training:
+#    - Keep ray_address: "auto"
+#    - Set num_workers to number of GPUs
+#
+# 2. For multi-node training:
+#    - Start Ray cluster on head node: ray start --head --port=6379
+#    - Start Ray on worker nodes: ray start --address=<head_ip>:6379
+#    - Set ray_address: "ray://<head_ip>:10001"
+#    - Set num_workers to total GPUs across all nodes
+#
+# 3. For fault-tolerant training (spot instances):
+#    - Increase max_failures (e.g., 5-10)
+#    - Decrease checkpointing_steps (e.g., 50)
+#    - Increase checkpoint_num_to_keep (e.g., 5)
+#
+# 4. DeepSpeed ZeRO stages:
+#    - ZeRO-1: Optimizer state partitioning
+#    - ZeRO-2: + Gradient partitioning (recommended)
+#    - ZeRO-3: + Parameter partitioning (for very large models)
+#
+# 5. For debugging:
+#    - Set num_workers: 1
+#    - Use local_mode: ray.init(local_mode=True) in code

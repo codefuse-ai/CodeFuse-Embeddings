@@ -17,8 +17,21 @@ class F2LLM:
         self.tokenizer = AutoTokenizer.from_pretrained(model_path)
         self.max_seq_length = max_seq_length
 
-    def set_device(self):
-        self.device = self.lm.device
+    def set_device(self, device=None):
+        """
+        Set device - compatible with both Accelerate and Ray Train
+
+        Args:
+            device: Specific device to use. If None, auto-detect from model.
+        """
+        if device is not None:
+            self.device = device
+        elif hasattr(self.lm, 'device'):
+            # Accelerate path: model already has device attribute
+            self.device = self.lm.device
+        else:
+            # Ray Train path: get device from model parameters
+            self.device = next(self.lm.parameters()).device
     
     def forward(self, batch):
         bs = batch['bs']
