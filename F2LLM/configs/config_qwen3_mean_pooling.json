@@ -1,0 +1,22 @@
+{
+  "model_path": "models/qwen3-0.6b",
+  "model_type": "qwen",
+  "experiment_id": "qwen3-0.6b-mean-pooling",
+  "train_data_path": "training_data/data_tokenized_qwen",
+  "output_dir": "output",
+  "tb_dir": "output/tb",
+  "cache_dir": "cache",
+  "train_batch_size": 16,
+  "checkpointing_steps": 5000,
+  "validation_steps": 5000,
+  "max_seq_length": 1024,
+  "learning_rate": 8e-6,
+  "min_lr": 1e-7,
+  "weight_decay": 0.01,
+  "warmup_steps": 500,
+  "train_epochs": 2,
+  "log_interval": 100,
+  "num_hard_neg": 7,
+  "embedding_strategy": "mean_pooling",
+  "pooling_strategy": "mean"
+}

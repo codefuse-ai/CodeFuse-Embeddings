@@ -21,6 +21,10 @@ class Args:
     warmup_steps: int = 100
     # embedding-related settings
     num_hard_neg: int = 7
+    # model configuration
+    model_type: str = "auto"
+    embedding_strategy: str = "last_token"
+    pooling_strategy: str = "cls"
     # train steps take precedence over epochs, set to -1 to disable
     train_steps: int = -1
     train_epochs: int = 5
