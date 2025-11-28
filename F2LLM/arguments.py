@@ -29,6 +29,18 @@ class Args:
     validation_steps: int = 100
     # just placeholder, for logging purpose
     num_processes: int=0
+    
+    # LoRA arguments
+    use_lora: bool = False
+    lora_r: int = 8
+    lora_alpha: int = 32
+    lora_dropout: float = 0.1
+    lora_target_modules: list = None
+
+    def __post_init__(self):
+        # Set default LoRA target modules if not provided
+        if self.lora_target_modules is None:
+            self.lora_target_modules = ["q_proj", "v_proj"]
 
     def dict(self):
         return asdict(self)
