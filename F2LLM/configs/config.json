@@ -1,7 +1,7 @@
 {
-  "model_path": "models/qwen3-4b",
-  "experiment_id": "4b+lr.8e-6+bs.16x32+context.1024+2epochs",
-  "train_data_path": "training_data/data_tokenized_qwen",
+  "model_path": "models/qwen3-0.6b",
+  "experiment_id": "0.6b+lr.8e-6+bs.16x32+context.1024+2epochs",
+  "train_data_path": "data_tokenized_qwen",
   "output_dir": "output",
   "tb_dir": "output/tb",
   "cache_dir": "cache",
@@ -15,5 +15,7 @@
   "warmup_steps": 500,
   "train_epochs": 2,
   "log_interval": 100,
-  "num_hard_neg": 7
+  "num_hard_neg": 7,
+  "gradient_accumulation_steps": 1,
+  "max_grad_norm": 1.0
 }

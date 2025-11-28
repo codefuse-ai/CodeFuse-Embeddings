@@ -12,7 +12,26 @@ class F2LLM:
         self.args = args
         self.dtype = torch.bfloat16
         self.device = None # set after accelerator.prepare
-        self.lm = AutoModel.from_pretrained(model_path, trust_remote_code=True, torch_dtype=self.dtype, attn_implementation='flash_attention_2')
+        
+        # Check if CUDA is available and flash_attn is installed
+        use_flash_attention = False
+        if torch.cuda.is_available():
+            try:
+                import flash_attn
+                use_flash_attention = True
+            except ImportError:
+                print("FlashAttention not installed, using default attention implementation.")
+        else:
+            print("CUDA not available, using default attention implementation.")
+        
+        # Load model with or without flash attention based on availability
+        if use_flash_attention:
+            print("Using FlashAttention2 for training.")
+            self.lm = AutoModel.from_pretrained(model_path, trust_remote_code=True, torch_dtype=self.dtype, attn_implementation='flash_attention_2')
+        else:
+            print("Using default attention implementation.")
+            self.lm = AutoModel.from_pretrained(model_path, trust_remote_code=True, torch_dtype=self.dtype)
+        
         self.lm.config.use_cache = False
         self.tokenizer = AutoTokenizer.from_pretrained(model_path)
         self.max_seq_length = max_seq_length
