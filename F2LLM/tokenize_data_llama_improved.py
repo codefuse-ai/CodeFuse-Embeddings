@@ -8,8 +8,8 @@ from tqdm.auto import tqdm
 
 
 def process_sent(sentence, tokenizer, max_seq_length):
-    """Process a single sentence with the given tokenizer"""
-    # We make sure there's always an eos token at the end of each sequence
+    """Process a single sentence with the given tokenizer for LLaMA models"""
+    # LLaMA tokenizer - similar to Qwen but with different max length
     tokenizer_outputs = tokenizer(sentence, max_length=max_seq_length, truncation=True, add_special_tokens=False)
     return np.array(tokenizer_outputs.input_ids + [tokenizer.eos_token_id])
 
@@ -51,11 +51,11 @@ def tokenize_data(data, column, tokenizer, max_seq_length, use_parallel=True, nu
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Tokenize datasets for Qwen models')
-    parser.add_argument('--model_path', type=str, default='models/qwen3-0.6b', help='Path to the Qwen model')
+    parser = argparse.ArgumentParser(description='Tokenize datasets for LLaMA models')
+    parser.add_argument('--model_path', type=str, default='models/llama-3-8b', help='Path to the LLaMA model')
     parser.add_argument('--input_dir', type=str, default='training_data', help='Input directory with parquet files')
-    parser.add_argument('--output_dir', type=str, default='data_tokenized_qwen', help='Output directory for tokenized data')
-    parser.add_argument('--max_seq_length', type=int, default=1023, help='Maximum sequence length')
+    parser.add_argument('--output_dir', type=str, default='data_tokenized_llama', help='Output directory for tokenized data')
+    parser.add_argument('--max_seq_length', type=int, default=2048, help='Maximum sequence length')
     parser.add_argument('--num_processes', type=int, default=1, help='Number of processes for parallel processing (0 or 1 for serial)')
     parser.add_argument('--mode', type=str, choices=['auto', 'serial', 'parallel'], default='auto', 
                         help='Processing mode: auto (based on num_processes), serial, or parallel')
@@ -72,6 +72,8 @@ def main():
     
     # Load tokenizer
     tokenizer = AutoTokenizer.from_pretrained(args.model_path)
+    # Add padding token if not present
+    tokenizer.pad_token = tokenizer.eos_token
     
     # Create output directory if it doesn't exist
     os.makedirs(args.output_dir, exist_ok=True)
@@ -123,3 +125,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

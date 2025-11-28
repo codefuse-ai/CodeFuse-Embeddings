@@ -8,7 +8,7 @@ from tqdm.auto import tqdm
 
 
 def process_sent(sentence, tokenizer, max_seq_length):
-    """Process a single sentence with the given tokenizer"""
+    """Process a single sentence with the given tokenizer for Qwen models"""
     # We make sure there's always an eos token at the end of each sequence
     tokenizer_outputs = tokenizer(sentence, max_length=max_seq_length, truncation=True, add_special_tokens=False)
     return np.array(tokenizer_outputs.input_ids + [tokenizer.eos_token_id])
@@ -123,3 +123,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

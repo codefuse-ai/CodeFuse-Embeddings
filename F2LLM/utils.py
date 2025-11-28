@@ -65,7 +65,7 @@ def hard_loss(
     ):
 
     if hard_neg_embeddings is None:
-        return 0.0
+        return torch.tensor(0.0, device=query_embeddings.device)
 
     bs = query_embeddings.size(0)
     a_norm = F.normalize(query_embeddings, p=2, dim=-1)
@@ -90,18 +90,51 @@ def validate(args, accelerator, model, valid_loader_dict, criterion, completed_s
         for batch in valid_dataloader:
             with torch.no_grad():
                 outputs = model.forward(batch)
-                loss_hard = hard_loss(outputs['query_passage_features'].squeeze(1), outputs['passage_passage_features'].squeeze(1), outputs['negative_passage_features'], criterion, accelerator)
-                loss_hard_ls.append(accelerator.gather(loss_hard).float())
+
+                query_emb = outputs['query_passage_features'].squeeze(1)
+                passage_emb = outputs['passage_passage_features'].squeeze(1)
+                neg_emb = outputs['negative_passage_features']
+
+                loss_hard = hard_loss(query_emb, passage_emb, neg_emb, criterion, accelerator)
+                if accelerator.num_processes > 1:
+                    # When using multiple processes, we need to gather the loss from all processes
+                    gathered_loss_hard = accelerator.gather(loss_hard).float()
+                    # Ensure gathered_loss_hard is at least 1D
+                    if gathered_loss_hard.dim() == 0:
+                        # Scalar tensor, convert to 1D tensor with one element
+                        gathered_loss_hard = gathered_loss_hard.unsqueeze(0)
+                    loss_hard_ls.append(gathered_loss_hard)
+                else:
+                    # When using a single process, just append the loss directly
+                    # Ensure loss_hard is at least 1D
+                    if loss_hard.dim() == 0:
+                        loss_hard = loss_hard.unsqueeze(0)
+                    loss_hard_ls.append(loss_hard.float())
                 if dataset_name in RETRIEVAL_DATASETS:
-                    loss = inbatch_loss(outputs['query_passage_features'].squeeze(1), outputs['passage_passage_features'].squeeze(1), criterion, accelerator)
-                    loss_ls.append(accelerator.gather(loss).float())
+                    loss = inbatch_loss(query_emb, passage_emb, criterion, accelerator)
+                    if accelerator.num_processes > 1:
+                        # When using multiple processes, we need to gather the loss from all processes
+                        gathered_loss = accelerator.gather(loss).float()
+                        # Ensure gathered_loss is at least 1D
+                        if gathered_loss.dim() == 0:
+                            # Scalar tensor, convert to 1D tensor with one element
+                            gathered_loss = gathered_loss.unsqueeze(0)
+                        loss_ls.append(gathered_loss)
+                    else:
+                        # When using a single process, just append the loss directly
+                        # Ensure loss is at least 1D
+                        if loss.dim() == 0:
+                            loss = loss.unsqueeze(0)
+                        loss_ls.append(loss.float())
         
         accelerator.wait_for_everyone()
-        loss_hard_ls = torch.cat(loss_hard_ls)
-        eval_log_dict[f'{dataset_name}/valid_loss_hard'] = loss_hard_ls.mean()
+        if loss_hard_ls:  # Check if the list is not empty
+            loss_hard_ls = torch.cat(loss_hard_ls)
+            eval_log_dict[f'{dataset_name}/valid_loss_hard'] = loss_hard_ls.mean()
         if dataset_name in RETRIEVAL_DATASETS:
-            loss_ls = torch.cat(loss_ls)
-            eval_log_dict[f"{dataset_name}/valid_loss_in_batch"] = loss_ls.mean()
+            if loss_ls:  # Check if the list is not empty
+                loss_ls = torch.cat(loss_ls)
+                eval_log_dict[f"{dataset_name}/valid_loss_in_batch"] = loss_ls.mean()
     
     eval_log_dict['Avg/retrieval/valid_loss_in_batch'] = torch.tensor([v for k, v in eval_log_dict.items() if k.split('/')[0] in RETRIEVAL_DATASETS and k.endswith('valid_loss_in_batch')]).mean()
     eval_log_dict['Avg/retrieval/valid_loss_hard'] = torch.tensor([v for k, v in eval_log_dict.items() if k.split('/')[0] in RETRIEVAL_DATASETS and k.endswith('valid_loss_hard')]).mean()

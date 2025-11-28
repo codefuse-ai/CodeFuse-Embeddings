@@ -9,9 +9,9 @@ from tqdm.auto import tqdm
 
 def process_sent(sentence, tokenizer, max_seq_length):
     """Process a single sentence with the given tokenizer"""
-    # We make sure there's always an eos token at the end of each sequence
-    tokenizer_outputs = tokenizer(sentence, max_length=max_seq_length, truncation=True, add_special_tokens=False)
-    return np.array(tokenizer_outputs.input_ids + [tokenizer.eos_token_id])
+    # BERT tokenizer handles special tokens automatically
+    tokenizer_outputs = tokenizer(sentence, max_length=max_seq_length, truncation=True, padding=False)
+    return np.array(tokenizer_outputs.input_ids)
 
 
 def process_sent_batch_serial(s, tokenizer, max_seq_length):
@@ -51,11 +51,11 @@ def tokenize_data(data, column, tokenizer, max_seq_length, use_parallel=True, nu
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Tokenize datasets for Qwen models')
-    parser.add_argument('--model_path', type=str, default='models/qwen3-0.6b', help='Path to the Qwen model')
+    parser = argparse.ArgumentParser(description='Tokenize datasets for BERT models')
+    parser.add_argument('--model_path', type=str, default='models/bert-base-uncased', help='Path to the BERT model')
     parser.add_argument('--input_dir', type=str, default='training_data', help='Input directory with parquet files')
-    parser.add_argument('--output_dir', type=str, default='data_tokenized_qwen', help='Output directory for tokenized data')
-    parser.add_argument('--max_seq_length', type=int, default=1023, help='Maximum sequence length')
+    parser.add_argument('--output_dir', type=str, default='data_tokenized_bert', help='Output directory for tokenized data')
+    parser.add_argument('--max_seq_length', type=int, default=512, help='Maximum sequence length')
     parser.add_argument('--num_processes', type=int, default=1, help='Number of processes for parallel processing (0 or 1 for serial)')
     parser.add_argument('--mode', type=str, choices=['auto', 'serial', 'parallel'], default='auto', 
                         help='Processing mode: auto (based on num_processes), serial, or parallel')
@@ -123,3 +123,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

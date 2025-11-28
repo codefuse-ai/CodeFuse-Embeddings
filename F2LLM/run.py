@@ -38,8 +38,23 @@ def collate_fn(batch_raw):
         2*bs+num_hard_neg*(i-1) - 2*bs+num_hard_neg*i-1: hard neg for sample i (i from 1 to bs)
     '''
     num_hard_neg = 1 if batch_raw[0]['dataset_name'] in CLASSIFICATION_DATASETS else args.num_hard_neg
-    # select args.num_hard_neg hard negatives from a total of 24
-    hard_neg_indices = [0] if num_hard_neg == 1 else random.sample(list(range(24)), num_hard_neg)
+    
+    # 动态确定实际可用的负样本数量
+    available_negatives = 0
+    for i in range(1, 25):  # 假设最多有24个负样本
+        if f'negative_{i}_input_ids' in batch_raw[0]:
+            available_negatives = i
+        else:
+            break
+    
+    # 根据实际可用的负样本数量调整采样数量
+    actual_num_hard_neg = min(num_hard_neg, available_negatives)
+    if actual_num_hard_neg <= 0:
+        actual_num_hard_neg = 1  # 至少需要一个负样本
+    
+    # 选择实际可用的负样本索引
+    hard_neg_indices = [0] if actual_num_hard_neg == 1 else random.sample(list(range(available_negatives)), actual_num_hard_neg)
+    
     input_ids = _stack(
         [s['query_input_ids'] for s in batch_raw]+\
         [s['passage_input_ids'] for s in batch_raw]+\
@@ -119,8 +134,12 @@ if args.train_steps < 0:
     override_train_step = True
 
 accelerator.print(f"******************************** Training step before prepare: {args.train_steps} ********************************")
-model = F2LLM(args.model_path, args.max_seq_length, args=args)
-model.lm.gradient_checkpointing_enable()
+model = F2LLM(args.model_path, args.max_seq_length, args=args, model_type=args.model_type, embedding_strategy=args.embedding_strategy, pooling_strategy=args.pooling_strategy)
+
+# Only enable gradient checkpointing if CUDA is available
+if torch.cuda.is_available():
+    model.lm.gradient_checkpointing_enable()
+
 # set seed again to make sure that different models share the same seed
 set_seed(0)
 
@@ -134,7 +153,10 @@ lr_scheduler = get_scheduler("cosine",
                             num_warmup_steps=args.warmup_steps,
                             num_training_steps=args.train_steps)
 
-AcceleratorState().deepspeed_plugin.deepspeed_config['train_micro_batch_size_per_gpu'] = args.train_batch_size
+# Check if deepspeed plugin is available before accessing its config
+if hasattr(AcceleratorState(), 'deepspeed_plugin') and AcceleratorState().deepspeed_plugin is not None:
+    AcceleratorState().deepspeed_plugin.deepspeed_config['train_micro_batch_size_per_gpu'] = args.train_batch_size
+
 model.lm, optimizer, lr_scheduler = accelerator.prepare(
     model.lm, optimizer, lr_scheduler
 )
@@ -148,6 +170,11 @@ if override_train_step:
     args.train_steps = len(train_dataloader) * args.train_epochs
 accelerator.print(f"******************************** Training step after prepare: {args.train_steps} ********************************")
 
+# Fix: Use the length of the first dataset or a default value if no datasets
+train_datasets_dict = dict(train_datasets)
+first_dataset_name = next(iter(train_datasets_dict)) if train_datasets_dict else None
+dataset = train_datasets_dict[first_dataset_name] if first_dataset_name else None
+num_train_samples = len(dataset) if dataset is not None else 0
 
 accelerate_train(args, accelerator, model, train_dataloader, valid_loaders,
-                 optimizer, lr_scheduler, len(dataset))
+                 optimizer, lr_scheduler, num_train_samples)
