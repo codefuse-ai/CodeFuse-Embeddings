@@ -4,6 +4,7 @@ import torch
 import torch.nn.functional as F
 from torch.nn import CrossEntropyLoss
 import os
+import random
 
 CLASSIFICATION_DATASETS = ['amazon_counterfactual', 'amazon_polarity', 'imdb', 'toxic_conversations', 'cola']
 CLUSTERING_DATASETS = ['amazon_reviews', 'banking77', 'emotion', 'mtop_intent', 'mtop_domain', 'massive_scenario', 'massive_intent', 'tweet_sentiment_extraction', 'arxiv_clustering_p2p', 'arxiv_clustering_s2s', 'biorxiv_clustering_p2p', 'biorxiv_clustering_s2s', 'medrxiv_clustering_p2p', 'medrxiv_clustering_s2s', 'reddit_clustering_p2p', 'reddit_clustering_s2s', 'stackexchange_clustering_p2p', 'stackexchange_clustering_s2s', 'twentynewsgroups']
@@ -65,7 +66,7 @@ def hard_loss(
     ):
 
     if hard_neg_embeddings is None:
-        return 0.0
+        return torch.tensor(0.0, device=query_embeddings.device)
 
     bs = query_embeddings.size(0)
     a_norm = F.normalize(query_embeddings, p=2, dim=-1)
@@ -83,25 +84,122 @@ def hard_loss(
     return loss_hard
 
 
+def mrl_inbatch_loss(
+        query_embeddings_dict, # dict of [bs, d]
+        context_embeddings_dict, # dict of [bs, d]
+        criterion,
+        accelerator,
+        mrl_dims,
+        mrl_loss_weights,
+        temperature=0.05,
+    ):
+    """Compute MRL loss for in-batch negative sampling across multiple dimensions"""
+    total_loss = 0.0
+    
+    for i, (dim, weight) in enumerate(zip(mrl_dims, mrl_loss_weights)):
+        query_emb = query_embeddings_dict[str(dim)]
+        context_emb = context_embeddings_dict[str(dim)]
+        
+        loss = inbatch_loss(query_emb, context_emb, criterion, accelerator, temperature)
+        total_loss += weight * loss
+    
+    return total_loss
+
+
+def mrl_hard_loss(
+        query_embeddings_dict, # dict of [bs, d]
+        context_embeddings_dict, # dict of [bs, d]
+        hard_neg_embeddings_dict, # dict of [bs, num, d]
+        criterion,
+        accelerator,
+        mrl_dims,
+        mrl_loss_weights,
+        temperature=0.05,
+    ):
+    """Compute MRL loss for hard negative sampling across multiple dimensions"""
+    total_loss = 0.0
+    
+    for i, (dim, weight) in enumerate(zip(mrl_dims, mrl_loss_weights)):
+        query_emb = query_embeddings_dict[str(dim)]
+        context_emb = context_embeddings_dict[str(dim)]
+        hard_neg_emb = hard_neg_embeddings_dict.get(str(dim), None)
+        
+        loss = hard_loss(query_emb, context_emb, hard_neg_emb, criterion, accelerator, temperature)
+        total_loss += weight * loss
+    
+    return total_loss
+
+
 def validate(args, accelerator, model, valid_loader_dict, criterion, completed_steps, summary_writer):
     eval_log_dict = {}
     for dataset_name, valid_dataloader in valid_loader_dict.items():
         loss_ls, loss_hard_ls = [], []
+        
+        # For MRL, we'll validate on the full dimension
+        target_dim = model.lm.config.hidden_size if model.mrl_enabled else None
+        
         for batch in valid_dataloader:
             with torch.no_grad():
-                outputs = model.forward(batch)
-                loss_hard = hard_loss(outputs['query_passage_features'].squeeze(1), outputs['passage_passage_features'].squeeze(1), outputs['negative_passage_features'], criterion, accelerator)
-                loss_hard_ls.append(accelerator.gather(loss_hard).float())
+                outputs = model.forward(batch, target_dim=target_dim)
+                
+                if model.mrl_enabled:
+                    # Extract embeddings for full dimension
+                    dim_key = str(model.lm.config.hidden_size)
+                    # Check if the dimension key exists in outputs, if not, use the default key
+                    if f'query_passage_features_{dim_key}' in outputs:
+                        query_emb = outputs[f'query_passage_features_{dim_key}'].squeeze(1)
+                        passage_emb = outputs[f'passage_passage_features_{dim_key}'].squeeze(1)
+                        neg_emb = outputs.get(f'negative_passage_features_{dim_key}', None)
+                    else:
+                        # Fallback to default keys
+                        query_emb = outputs['query_passage_features'].squeeze(1)
+                        passage_emb = outputs['passage_passage_features'].squeeze(1)
+                        neg_emb = outputs.get('negative_passage_features', None)
+                else:
+                    query_emb = outputs['query_passage_features'].squeeze(1)
+                    passage_emb = outputs['passage_passage_features'].squeeze(1)
+                    neg_emb = outputs['negative_passage_features']
+                
+                loss_hard = hard_loss(query_emb, passage_emb, neg_emb, criterion, accelerator)
+                if accelerator.num_processes > 1:
+                    # When using multiple processes, we need to gather the loss from all processes
+                    gathered_loss_hard = accelerator.gather(loss_hard).float()
+                    # Ensure gathered_loss_hard is at least 1D
+                    if gathered_loss_hard.dim() == 0:
+                        # Scalar tensor, convert to 1D tensor with one element
+                        gathered_loss_hard = gathered_loss_hard.unsqueeze(0)
+                    loss_hard_ls.append(gathered_loss_hard)
+                else:
+                    # When using a single process, just append the loss directly
+                    # Ensure loss_hard is at least 1D
+                    if loss_hard.dim() == 0:
+                        loss_hard = loss_hard.unsqueeze(0)
+                    loss_hard_ls.append(loss_hard.float())
                 if dataset_name in RETRIEVAL_DATASETS:
-                    loss = inbatch_loss(outputs['query_passage_features'].squeeze(1), outputs['passage_passage_features'].squeeze(1), criterion, accelerator)
-                    loss_ls.append(accelerator.gather(loss).float())
+                    loss = inbatch_loss(query_emb, passage_emb, criterion, accelerator)
+                    if accelerator.num_processes > 1:
+                        # When using multiple processes, we need to gather the loss from all processes
+                        gathered_loss = accelerator.gather(loss).float()
+                        # Ensure gathered_loss is at least 1D
+                        if gathered_loss.dim() == 0:
+                            # Scalar tensor, convert to 1D tensor with one element
+                            gathered_loss = gathered_loss.unsqueeze(0)
+                        loss_ls.append(gathered_loss)
+                    else:
+                        # When using a single process, just append the loss directly
+                        # Ensure loss is at least 1D
+                        if loss.dim() == 0:
+                            loss = loss.unsqueeze(0)
+                        loss_ls.append(loss.float())
         
         accelerator.wait_for_everyone()
-        loss_hard_ls = torch.cat(loss_hard_ls)
-        eval_log_dict[f'{dataset_name}/valid_loss_hard'] = loss_hard_ls.mean()
+        if loss_hard_ls:  # Check if the list is not empty
+            loss_hard_ls = torch.cat(loss_hard_ls)
+            eval_log_dict[f'{dataset_name}/valid_loss_hard'] = loss_hard_ls.mean()
         if dataset_name in RETRIEVAL_DATASETS:
-            loss_ls = torch.cat(loss_ls)
-            eval_log_dict[f"{dataset_name}/valid_loss_in_batch"] = loss_ls.mean()
+            if loss_ls:  # Check if the list is not empty
+                loss_ls = torch.cat(loss_ls)
+                eval_log_dict[f"{dataset_name}/valid_loss_in_batch"] = loss_ls.mean()
     
     eval_log_dict['Avg/retrieval/valid_loss_in_batch'] = torch.tensor([v for k, v in eval_log_dict.items() if k.split('/')[0] in RETRIEVAL_DATASETS and k.endswith('valid_loss_in_batch')]).mean()
     eval_log_dict['Avg/retrieval/valid_loss_hard'] = torch.tensor([v for k, v in eval_log_dict.items() if k.split('/')[0] in RETRIEVAL_DATASETS and k.endswith('valid_loss_hard')]).mean()
@@ -147,21 +245,59 @@ def accelerate_train(args,
         accelerator.print(f"*************** Starting epoch {epoch+1} ***************")
         train_dataloader.reset_epoch(epoch)
         for batch in train_dataloader:
-            # forward and compute loss
-            outputs = model.forward(batch)
-            # passage features: [bs, 1, d]
-            # hard_neg_features: [bs, num_hard_neg, d]
-
-            loss_hard = hard_loss(outputs['query_passage_features'].squeeze(1), outputs['passage_passage_features'].squeeze(1), outputs['negative_passage_features'], criterion, accelerator)
+            # For MRL, randomly select a dimension for this batch
+            if model.mrl_enabled and args.mrl_dims:
+                # Randomly select a dimension for this batch
+                target_dim = random.choice([model.lm.config.hidden_size] + args.mrl_dims)
+                outputs = model.forward(batch, target_dim=target_dim)
+                
+                # Extract embeddings for the selected dimension
+                if target_dim == model.lm.config.hidden_size:
+                    dim_key = str(target_dim)
+                    # Check if the dimension key exists in outputs, if not, use the default key
+                    if f'query_passage_features_{dim_key}' in outputs:
+                        query_emb = outputs[f'query_passage_features_{dim_key}'].squeeze(1)
+                        passage_emb = outputs[f'passage_passage_features_{dim_key}'].squeeze(1)
+                        neg_emb = outputs.get(f'negative_passage_features_{dim_key}', None)
+                    else:
+                        # Fallback to default keys
+                        query_emb = outputs['query_passage_features'].squeeze(1)
+                        passage_emb = outputs['passage_passage_features'].squeeze(1)
+                        neg_emb = outputs.get('negative_passage_features', None)
+                else:
+                    dim_key = str(target_dim)
+                    # Check if the dimension key exists in outputs, if not, use the default key
+                    if f'query_passage_features_{dim_key}' in outputs:
+                        query_emb = outputs[f'query_passage_features_{dim_key}'].squeeze(1)
+                        passage_emb = outputs[f'passage_passage_features_{dim_key}'].squeeze(1)
+                        neg_emb = outputs.get(f'negative_passage_features_{dim_key}', None)
+                    else:
+                        # Fallback to default keys
+                        query_emb = outputs['query_passage_features'].squeeze(1)
+                        passage_emb = outputs['passage_passage_features'].squeeze(1)
+                        neg_emb = outputs.get('negative_passage_features', None)
+                
+                # Compute loss for the selected dimension
+                loss_hard = hard_loss(query_emb, passage_emb, neg_emb, criterion, accelerator)
+                if batch['dataset_name'] in RETRIEVAL_DATASETS:
+                    loss = inbatch_loss(query_emb, passage_emb, criterion, accelerator)
+                else:
+                    loss = torch.tensor(0.0, device=query_emb.device)
+            else:
+                # Standard training without MRL
+                outputs = model.forward(batch)
+                loss_hard = hard_loss(outputs['query_passage_features'].squeeze(1), outputs['passage_passage_features'].squeeze(1), outputs['negative_passage_features'], criterion, accelerator)
+                if batch['dataset_name'] in RETRIEVAL_DATASETS:
+                    loss = inbatch_loss(outputs['query_passage_features'].squeeze(1), outputs['passage_passage_features'].squeeze(1), criterion, accelerator)
+                else:
+                    loss = torch.tensor(0.0, device=outputs['query_passage_features'].squeeze(1).device)
+            
             dataset_name = batch['dataset_name']
             count_hard_dict[dataset_name] += 1
             loss_hard_dict[dataset_name] += loss_hard.detach().float()
             if dataset_name in RETRIEVAL_DATASETS:
-                loss = inbatch_loss(outputs['query_passage_features'].squeeze(1), outputs['passage_passage_features'].squeeze(1), criterion, accelerator)
                 count_dict[dataset_name] += 1
                 loss_dict[dataset_name] += loss.detach().float()
-            else:
-                loss = 0.0
             
             loss_total = loss + loss_hard
 
