@@ -120,7 +120,11 @@ if args.train_steps < 0:
 
 accelerator.print(f"******************************** Training step before prepare: {args.train_steps} ********************************")
 model = F2LLM(args.model_path, args.max_seq_length, args=args)
-model.lm.gradient_checkpointing_enable()
+
+# Only enable gradient checkpointing if CUDA is available
+if torch.cuda.is_available():
+    model.lm.gradient_checkpointing_enable()
+
 # set seed again to make sure that different models share the same seed
 set_seed(0)
 
@@ -134,7 +138,10 @@ lr_scheduler = get_scheduler("cosine",
                             num_warmup_steps=args.warmup_steps,
                             num_training_steps=args.train_steps)
 
-AcceleratorState().deepspeed_plugin.deepspeed_config['train_micro_batch_size_per_gpu'] = args.train_batch_size
+# Check if deepspeed plugin is available before accessing its config
+if hasattr(AcceleratorState(), 'deepspeed_plugin') and AcceleratorState().deepspeed_plugin is not None:
+    AcceleratorState().deepspeed_plugin.deepspeed_config['train_micro_batch_size_per_gpu'] = args.train_batch_size
+
 model.lm, optimizer, lr_scheduler = accelerator.prepare(
     model.lm, optimizer, lr_scheduler
 )
@@ -148,6 +155,11 @@ if override_train_step:
     args.train_steps = len(train_dataloader) * args.train_epochs
 accelerator.print(f"******************************** Training step after prepare: {args.train_steps} ********************************")
 
+# Fix: Use the length of the first dataset or a default value if no datasets
+train_datasets_dict = dict(train_datasets)
+first_dataset_name = next(iter(train_datasets_dict)) if train_datasets_dict else None
+dataset = train_datasets_dict[first_dataset_name] if first_dataset_name else None
+num_train_samples = len(dataset) if dataset is not None else 0
 
 accelerate_train(args, accelerator, model, train_dataloader, valid_loaders,
-                 optimizer, lr_scheduler, len(dataset))
+                 optimizer, lr_scheduler, num_train_samples)
