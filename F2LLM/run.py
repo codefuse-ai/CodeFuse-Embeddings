@@ -120,7 +120,13 @@ if args.train_steps < 0:
 
 accelerator.print(f"******************************** Training step before prepare: {args.train_steps} ********************************")
 model = F2LLM(args.model_path, args.max_seq_length, args=args)
-model.lm.gradient_checkpointing_enable()
+
+try:
+    model.lm.gradient_checkpointing_enable()
+    accelerator.print("Gradient checkpointing 已启用")
+except Exception as e:
+    accelerator.print("继续训练但不使用 gradient checkpointing")
+
 # set seed again to make sure that different models share the same seed
 set_seed(0)
 

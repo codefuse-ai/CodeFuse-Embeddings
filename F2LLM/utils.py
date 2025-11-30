@@ -15,6 +15,29 @@ def write_tensorboard(summary_writer: SummaryWriter, log_dict: dict, completed_s
         summary_writer.add_scalar(key, value, completed_steps)
 
 
+def detect_encoder_only_model(config):
+    model_type = config.model_type.lower() if hasattr(config, 'model_type') else ''
+
+    encoder_only_types = [
+        'bert', 'roberta', 'electra', 'deberta', 'deberta-v2',
+        'albert', 'xlm-roberta', 'camembert', 'distilbert',
+        'mpnet', 'squeezebert', 'mobilebert'
+    ]
+
+    for encoder_type in encoder_only_types:
+        if encoder_type in model_type:
+            return True
+
+    if hasattr(config, 'is_decoder') and config.is_decoder:
+        return False
+
+    if hasattr(config, 'is_encoder_decoder') and not config.is_encoder_decoder:
+        if not hasattr(config, 'is_decoder'):
+            return True
+
+    return False
+
+
 def save_checkpoint(args, accelerator, model, output_dir, lr_scheduler):
     accelerator.wait_for_everyone()
     accelerator.print(f"Saving checkpoint to {output_dir}")

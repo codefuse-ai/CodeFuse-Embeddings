@@ -2,20 +2,37 @@ from multiprocessing import Pool
 import numpy as np
 import pandas as pd
 import os
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, AutoConfig
 from tqdm.auto import tqdm
+from utils import detect_encoder_only_model
 
 
-tokenizer = AutoTokenizer.from_pretrained('models/qwen3-0.6b')
+model_path = 'models/albert-base-v2'
+tokenizer = AutoTokenizer.from_pretrained(model_path)
 max_seq_length = 1023
+config = AutoConfig.from_pretrained(model_path, trust_remote_code=True)
+is_encoder_only = detect_encoder_only_model(config)
 
 
 def process_sent(sentence):
-
-    # We make sure there's always an eos token at the end of each sequence
-    tokenizer_outputs = tokenizer(sentence, max_length=max_seq_length, truncation=True, add_special_tokens=False)
-
-    return np.array(tokenizer_outputs.input_ids + [tokenizer.eos_token_id])
+    if is_encoder_only:
+        # Encoder-only模型: 让tokenizer自动添加特殊token ([CLS], [SEP])
+        tokenizer_outputs = tokenizer(
+            sentence,
+            max_length=max_seq_length,
+            truncation=True,
+            add_special_tokens=True
+        )
+        return np.array(tokenizer_outputs.input_ids)
+    else:
+        # Decoder-only模型: 手动添加eos_token
+        tokenizer_outputs = tokenizer(
+            sentence,
+            max_length=max_seq_length,
+            truncation=True,
+            add_special_tokens=False
+        )
+        return np.array(tokenizer_outputs.input_ids + [tokenizer.eos_token_id])
 
 
 def process_sent_batch(s):
@@ -30,8 +47,11 @@ def parallelize(data, func, num_of_processes=8):
 
 
 root_dir = 'training_data'
+model_name = config.model_type
 for ds_name in tqdm(sorted(os.listdir(root_dir))):
     print(ds_name, flush=True)
+    if not ds_name.endswith(".parquet"):
+        continue
 
     df = pd.read_parquet(f"{root_dir}/{ds_name}")
     df['query_input_ids'] = parallelize(df['query'], process_sent_batch, 62)
@@ -51,4 +71,4 @@ for ds_name in tqdm(sorted(os.listdir(root_dir))):
     for i in range(1, num_neg+1):
         df[f'negative_{i}_input_ids'] = df[f'negative_{i}'].map(df_tmp.input_ids)
 
-    df.to_parquet(f'data_tokenized_qwen/{ds_name}', index=False)
+    df.to_parquet(f'data_tokenized_{model_name}/{ds_name}', index=False)
