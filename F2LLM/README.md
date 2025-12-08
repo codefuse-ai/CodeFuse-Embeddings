@@ -27,10 +27,14 @@ In this repo we provide a streamlined and efficient script for training embeddin
 - Setup environment following `requirements.txt`. We note that transformers>=4.51.0 is required for training Qwen3 models.
 - Download data and backbone models from Hugging Face (we use Qwen3 models).
 - Run `tokenize_data_qwen.py` to tokenize the downloaded data
-- Modify model path, data path, and other arguments in `configs/config.json`.
+- Modify model path, data path, and other arguments in `configs/config.json`. Note that you can configure gradient accumulation using the `gradient_accumulation_steps` parameter to enable training with larger effective batch sizes on resource-constrained hardware.
 - Start training with `accelerate launch --config_file configs/accelerate_config.yaml run.py --config configs/config.json`.
 
 Note: we recommend setting `num_processes` to 1 in `configs/accelerate_config.yaml` and launch the training code once to generate cache for training data before starting the actual training.
+
+### Gradient Accumulation
+
+The training script supports gradient accumulation to enable training with larger effective batch sizes on resource-constrained hardware. This feature allows users to simulate large batch training by accumulating gradients over multiple smaller batches before performing optimization steps. Configure gradient accumulation by setting the `gradient_accumulation_steps` parameter in your config file - the default value is 1 (no accumulation). For example, with `train_batch_size=8` and `gradient_accumulation_steps=4`, the effective batch size becomes 32.
 
 For multi-node training, run on the main node:
 
