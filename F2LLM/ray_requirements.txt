@@ -1,0 +1,14 @@
+# Ray-specific requirements for distributed training
+ray[default]>=2.9.0
+ray[train]>=2.9.0
+ray[tune]>=2.9.0
+ray[air]>=2.9.0
+torch
+transformers
+accelerate
+datasets
+deepspeed
+tensorboard
+numpy
+psutil
+pyarrow
