@@ -496,7 +496,12 @@ class CodeFuse_CGE_Large(nn.Module, SupportsLoRA):
         self.config = config
         self.lora_config = lora_config
         self.quant_config = quant_config
-        self.plm_model = Qwen2ForCausalLM(config, cache_config, quant_config)
+        self.plm_model = Qwen2ForCausalLM(
+            config=config,
+            cache_config=cache_config,
+            quant_config=quant_config,
+            lora_config=lora_config     # 添加lora_config
+        )
         self.embedding_method = config.embedding_method
         self.inf_seq_length = config.inf_seq_length
         self.padding_side = config.padding_side
