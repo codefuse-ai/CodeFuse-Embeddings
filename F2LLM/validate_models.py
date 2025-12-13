@@ -246,6 +246,7 @@ if __name__ == "__main__":
     if args.mode == 'quick':
         run_quick_test()
     else:
+        validator = ModelValidation()
         results = run_full_validation()
         
         if args.export:
