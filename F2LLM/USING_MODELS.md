@@ -1,44 +1,33 @@
 # Using Expanded Model Support in F2LLM
 
-This guide covers how to use the 13 newly supported base models for training embedding models.
+This guide covers how to use the supported open models for training embedding models. All listed models are usable without Hugging Face tokens.
 
 ## Supported Models
 
-F2LLM now supports models from 6 different families:
+F2LLM supports the following open families:
 
 | Family | Models | Best For |
 |--------|--------|----------|
 | **Qwen3** | 0.6B, 1.7B, 4B | Efficiency, multilingual |
-| **LLaMA 2** | 7B, 13B | General purpose |
-| **LLaMA 3** | 8B | Modern, efficient (GQA) |
 | **Mistral** | 7B | Speed, long context (GQA) |
 | **Phi** | 2.7B, 3.8B | Edge deployment (GQA for 3.8B) |
-| **Code-LLaMA** | 7B | Code tasks, 16K context |
-| **Gemma** | 7B, 9B | High quality |
 
 ## Quick Start
 
-### 1. Load a Model
+### 1. Load a Model (Open)
 
 ```python
 from model import F2LLM
 import torch
 
-# Load any supported model
-model = F2LLM(
-    model_path='meta-llama/Llama-2-7b',
-    model_id='llama-2-7b',           # Registry ID for auto-config
-    max_seq_length=4096,
-    torch_dtype=torch.bfloat16
-)
-
-# Other examples
-model = F2LLM('mistralai/Mistral-7B-v0.1', model_id='mistral-7b')
-model = F2LLM('microsoft/Phi-3-mini-4k-instruct', model_id='phi-3-mini')
-model = F2LLM('google/gemma-7b', model_id='gemma-7b')
+# Open models (no token required)
+model = F2LLM('mistralai/Mistral-7B-v0.1', model_id='mistral-7b', torch_dtype=torch.bfloat16)
+model = F2LLM('microsoft/Phi-3-mini-4k-instruct', model_id='phi-3-mini', torch_dtype=torch.bfloat16)
+model = F2LLM('microsoft/phi-2', model_id='phi-2', torch_dtype=torch.bfloat16)
+model = F2LLM('Qwen/Qwen3-1.7B', model_id='qwen3-1.7b', torch_dtype=torch.bfloat16)
 ```
 
-### 2. Tokenize Data
+### 2. Tokenize Data (Open Models)
 
 Use the generic tokenizer that works with any model:
 
@@ -46,20 +35,7 @@ Use the generic tokenizer that works with any model:
 # Run from the repo root or the F2LLM folder
 cd F2LLM
 
-# Tokenize with a supported model
-python tokenize_data_generic.py \
-  --model_path meta-llama/Llama-2-7b \
-  --model_id llama-2-7b \
-  --root_dir ../training_data \
-  --output_dir ../data_tokenized \
-  --max_seq_length 4096 \
-  --num_processes 8 \
-  --hf_token "$HF_TOKEN"   # optional; required for gated models
-```
-
-Tip: If you don't have access to a gated model (401 error), try an open model first:
-
-```bash
+# Tokenize with open models
 python tokenize_data_generic.py \
   --model_path mistralai/Mistral-7B-v0.1 \
   --model_id mistral-7b \
@@ -69,20 +45,30 @@ python tokenize_data_generic.py \
   --num_processes 8
 ```
 
+You can substitute other open models:
+
+```bash
+python tokenize_data_generic.py \
+  --model_path microsoft/Phi-3-mini-4k-instruct \
+  --model_id phi-3-mini \
+  --root_dir ../training_data \
+  --output_dir ../data_tokenized \
+  --max_seq_length 4096 \
+  --num_processes 8
+```
+
 Or in Python:
 
 ```python
 from tokenize_data_generic import tokenize_dataset
-import os
 
 tokenize_dataset(
     root_dir='training_data',
     output_dir='data_tokenized',
-    model_path='meta-llama/Llama-2-7b',
-    model_id='llama-2-7b',
-    max_seq_length=4096,
-  num_processes=8,
-  hf_token=os.getenv('HF_TOKEN')
+  model_path='mistralai/Mistral-7B-v0.1',
+  model_id='mistral-7b',
+  max_seq_length=8192,
+  num_processes=8
 )
 ```
 
@@ -105,13 +91,7 @@ Choose a configuration file or create one:
 }
 ```
 
-Pre-configured files available:
-- `configs/llama2-7b.json`
-- `configs/mistral-7b.json`
-- `configs/phi3-mini.json`
-- `configs/llama3-8b.json`
-- `configs/code-llama-7b.json`
-- `configs/gemma-7b.json`
+Start from `configs/config.json` and update fields for your chosen open model.
 
 ### 4. Train
 
@@ -120,18 +100,18 @@ Pre-configured files available:
 cd F2LLM
 
 # Single GPU / CPU
-python run.py --config configs/llama2-7b.json
+python run.py --config configs/config.json
 
 # Multi-GPU with accelerate
 accelerate launch --config_file configs/accelerate_config.yaml \
-  run.py --config configs/llama2-7b.json
+  run.py --config configs/config.json
 
 # Multi-node training
 accelerate launch --config_file configs/accelerate_config.yaml \
   --num_machines 2 --num_processes 16 \
   --machine_rank 0 --main_process_ip MASTER_IP \
   --main_process_port 6379 \
-  run.py --config configs/llama2-7b.json
+  run.py --config configs/config.json
 ```
 
 ## macOS setup notes
@@ -151,20 +131,7 @@ pip install torch torchvision torchaudio
 pip install -r F2LLM/requirements.txt
 ```
 
-## Hugging Face Authentication
-
-Some models (e.g., LLaMA 2/3, Code LLaMA, Gemma) are gated on Hugging Face. If you get a 401 Unauthorized/GatedRepoError while loading a tokenizer or model:
-
-- Request/accept access on the model page (e.g., https://huggingface.co/meta-llama/Llama-2-7b)
-- Login locally:
-  - `huggingface-cli login` and paste your token, or
-  - export an environment variable: `export HF_TOKEN=hf_xxx`
-- Pass the token via CLI: `--hf_token "$HF_TOKEN"` (the script also reads `HF_TOKEN` automatically)
-
-Open alternatives for quick start:
-- `mistralai/Mistral-7B-v0.1` (7B)
-- `microsoft/Phi-3-mini-4k-instruct` (3.8B)
-- `Qwen/Qwen2-7B` or `Qwen/Qwen2.5-7B`
+Note: All examples above use open models; no HF token required.
 ```
 
 ## Model Registry
@@ -239,14 +206,11 @@ model = factory.create_model(
 - Mistral-7B: 7B, fast with GQA
 - LLaMA 2-7B: 7B, proven, well-tested
 
-**High Quality**
-- LLaMA 3-8B: 8B, modern architecture
-- Gemma-7B: 7B, high-quality pretraining
-- Gemma-2-9B: 9B, excellent performance
-- Code-LLaMA-7B: 7B, specialized for code
+**High Quality (Open)**
+- Mistral-7B: 7B, strong overall quality
 
 **Large Scale**
-- LLaMA 2-13B: 13B, more capacity
+- Qwen3-4B: 4B, efficient and capable
 
 ### By Use Case
 
@@ -435,20 +399,16 @@ Ensure all new files are in `F2LLM/` directory:
 |-------|--------|-----------|---|
 | Phi-3-Mini | 12 GB | 32 | ~2-3 hrs/epoch |
 | Mistral-7B | 14 GB | 16 | ~8 hrs/epoch |
-| LLaMA 2-7B | 14 GB | 16 | ~8 hrs/epoch |
-| Code-LLaMA-7B | 14 GB | 8 | ~10 hrs/epoch |
-| LLaMA 3-8B | 20 GB | 16 | ~9 hrs/epoch |
-| Gemma-2-9B | 20 GB | 16 | ~10 hrs/epoch |
+| Qwen3-4B | 16 GB | 16 | ~8-9 hrs/epoch |
 
 ### Inference Speed (Embeddings/sec)
 
 | Model | Speed | Quality |
 |-------|-------|---------|
 | Phi-2 | 1500+ | Good |
-| Mistral-7B | 1200+ | Very Good |
-| LLaMA 2-7B | 800+ | Very Good |
-| Gemma-7B | 850+ | Excellent |
-| LLaMA 3-8B | 900+ | Excellent |
+| Phi-3-Mini | 1200+ | Very Good |
+| Mistral-7B | 1100+ | Very Good |
+| Qwen3-4B | 900+ | Very Good |
 
 ## References
 

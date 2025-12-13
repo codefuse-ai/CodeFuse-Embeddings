@@ -147,69 +147,7 @@ class ModelRegistry:
             hf_model_id="Qwen/Qwen3-4B",
         ))
         
-        # ============ LLaMA Series ============
-        self.register(ModelConfig(
-            model_id="llama-2-7b",
-            family="llama2",
-            display_name="LLaMA-2 7B",
-            description="Meta's 7B LLaMA 2 model",
-            hidden_size=4096,
-            num_attention_heads=32,
-            num_key_value_heads=32,
-            intermediate_size=11008,
-            num_hidden_layers=32,
-            vocab_size=32000,
-            attention_type=AttentionType.FLASH_ATTENTION_2,
-            position_embedding=PositionEmbeddingType.ROPE,
-            rope_theta=10000.0,
-            tokenizer_type=TokenizerType.SENTENCEPIECE,
-            recommended_max_seq_length=4096,
-            recommended_memory_gb=16.0,
-            hf_model_id="meta-llama/Llama-2-7b",
-            paper_url="https://arxiv.org/abs/2307.09288",
-        ))
-        
-        self.register(ModelConfig(
-            model_id="llama-2-13b",
-            family="llama2",
-            display_name="LLaMA-2 13B",
-            description="Meta's 13B LLaMA 2 model",
-            hidden_size=5120,
-            num_attention_heads=40,
-            num_key_value_heads=40,
-            intermediate_size=13824,
-            num_hidden_layers=40,
-            vocab_size=32000,
-            attention_type=AttentionType.FLASH_ATTENTION_2,
-            position_embedding=PositionEmbeddingType.ROPE,
-            rope_theta=10000.0,
-            tokenizer_type=TokenizerType.SENTENCEPIECE,
-            recommended_max_seq_length=4096,
-            recommended_memory_gb=32.0,
-            hf_model_id="meta-llama/Llama-2-13b",
-            paper_url="https://arxiv.org/abs/2307.09288",
-        ))
-        
-        self.register(ModelConfig(
-            model_id="llama-3-8b",
-            family="llama3",
-            display_name="LLaMA-3 8B",
-            description="Meta's 8B LLaMA 3 model with GQA",
-            hidden_size=4096,
-            num_attention_heads=32,
-            num_key_value_heads=8,
-            intermediate_size=14336,
-            num_hidden_layers=32,
-            vocab_size=128256,
-            attention_type=AttentionType.GROUPED_QUERY,
-            position_embedding=PositionEmbeddingType.ROPE,
-            rope_theta=500000.0,
-            tokenizer_type=TokenizerType.BPE,
-            recommended_max_seq_length=8192,
-            recommended_memory_gb=20.0,
-            hf_model_id="meta-llama/Meta-Llama-3-8B",
-            paper_url="https://arxiv.org/abs/2405.04434",
-        ))
+        # (Removed LLaMA series - requires gated access)
         
         # ============ Mistral Series ============
         self.register(ModelConfig(
@@ -273,68 +211,9 @@ class ModelRegistry:
             hf_model_id="microsoft/Phi-3-mini-4k-instruct",
         ))
         
-        # ============ Code-LLaMA Series ============
-        self.register(ModelConfig(
-            model_id="code-llama-7b",
-            family="code-llama",
-            display_name="Code-LLaMA 7B",
-            description="Meta's 7B Code-LLaMA specialized for coding",
-            hidden_size=4096,
-            num_attention_heads=32,
-            num_key_value_heads=32,
-            intermediate_size=11008,
-            num_hidden_layers=32,
-            vocab_size=32016,
-            attention_type=AttentionType.FLASH_ATTENTION_2,
-            position_embedding=PositionEmbeddingType.ROPE,
-            rope_theta=1000000.0,  # Extended context
-            tokenizer_type=TokenizerType.SENTENCEPIECE,
-            recommended_max_seq_length=16384,
-            recommended_memory_gb=18.0,
-            hf_model_id="meta-llama/CodeLlama-7b",
-            paper_url="https://arxiv.org/abs/2308.12950",
-        ))
+        # (Removed Code-LLaMA series - requires gated access)
         
-        # ============ Gemma Series ============
-        self.register(ModelConfig(
-            model_id="gemma-7b",
-            family="gemma",
-            display_name="Gemma 7B",
-            description="Google's 7B Gemma model",
-            hidden_size=3072,
-            num_attention_heads=16,
-            num_key_value_heads=16,
-            intermediate_size=24576,
-            num_hidden_layers=28,
-            vocab_size=256000,
-            attention_type=AttentionType.FLASH_ATTENTION_2,
-            position_embedding=PositionEmbeddingType.ROPE,
-            rope_theta=10000.0,
-            tokenizer_type=TokenizerType.SENTENCEPIECE,
-            recommended_max_seq_length=8192,
-            recommended_memory_gb=16.0,
-            hf_model_id="google/gemma-7b",
-        ))
-        
-        self.register(ModelConfig(
-            model_id="gemma-2-9b",
-            family="gemma",
-            display_name="Gemma 2 9B",
-            description="Google's 9B Gemma 2 model",
-            hidden_size=3584,
-            num_attention_heads=16,
-            num_key_value_heads=16,
-            intermediate_size=21504,
-            num_hidden_layers=42,
-            vocab_size=256000,
-            attention_type=AttentionType.FLASH_ATTENTION_2,
-            position_embedding=PositionEmbeddingType.ROPE,
-            rope_theta=10000.0,
-            tokenizer_type=TokenizerType.SENTENCEPIECE,
-            recommended_max_seq_length=8192,
-            recommended_memory_gb=20.0,
-            hf_model_id="google/gemma-2-9b",
-        ))
+        # (Removed Gemma series - requires gated access)
     
     def register(self, config: ModelConfig) -> None:
         """Register a new model configuration"""
