@@ -38,6 +38,11 @@ For multi-node training, run on the main node:
 accelerate launch --config_file configs/accelerate_config.yaml --num_machines N_NODE --num_processes N_PROCESSES --machine_rank 0 --main_process_ip MASTER_IP --main_process_port MASTER_PORT run.py --config configs/config.json
 ```
 
+ray版本使用：
+```
+bash train_with_ray.sh configs/config_ray.json
+```
+
 where N_NODE is the number of machines; N_PROCESSES is N_NODE\*8; MASTER_IP is the IP address of your master node, and MASTER_PORT is a port available on your machine (e.g. 6379).
 
 On worker nodes, also run the above commmand but modify `machine_rank` accordingly.

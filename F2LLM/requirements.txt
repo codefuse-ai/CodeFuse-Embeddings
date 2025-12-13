@@ -3,5 +3,6 @@ datasets
 deepspeed
 flash-attn
 torch
-transformers
+transformers>=4.51.0
 tensorboard
+ray[train]
