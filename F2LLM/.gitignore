@@ -1,0 +1,11 @@
+# Ignore local training data and outputs
+/training_data/
+/data_tokenized/
+/output/
+/cache/
+
+# Python caches
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd

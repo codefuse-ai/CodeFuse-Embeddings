@@ -1,0 +1,11 @@
+# Python caches
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# VS Code
+.vscode/
+
+# macOS
+.DS_Store

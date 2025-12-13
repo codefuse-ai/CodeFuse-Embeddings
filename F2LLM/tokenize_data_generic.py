@@ -160,18 +160,14 @@ class GenericTokenizer:
         Returns:
             Dataframe with added tokenized column
         """
-        logger.info(f"Tokenizing {len(data)} texts with {self.num_processes} processes")
+        logger.info(f"Tokenizing {len(data)} texts (sequential mode)")
         
-        indices = np.array_split(data.index, self.num_processes)
+        indices = np.array_split(data.index, max(1, self.num_processes))
         data_split = [data.loc[idx] for idx in indices]
         
-        with Pool(self.num_processes) as pool:
-            tokenized = pd.concat(
-                pool.map(
-                    lambda df: self._tokenize_dataframe(df, text_column),
-                    data_split
-                )
-            )
+        # Avoid multiprocessing pickling issues on macOS by processing sequentially
+        parts = [self._tokenize_dataframe(df, text_column) for df in data_split]
+        tokenized = pd.concat(parts)
         
         data[output_column] = tokenized
         return data
@@ -219,15 +215,16 @@ def tokenize_dataset(
         hf_token=hf_token,
     )
     
-    logger.info(f"Processing datasets from {root_dir}")
+    logger.info(f"Processing datasets from {root_dir} (recursive)")
     
-    for ds_name in tqdm(sorted(os.listdir(root_dir))):
-        if not ds_name.endswith('.parquet'):
-            continue
-        
-        logger.info(f"Processing: {ds_name}")
-        
-        df = pd.read_parquet(os.path.join(root_dir, ds_name))
+    for dirpath, _, filenames in os.walk(root_dir):
+        parquet_files = sorted([f for f in filenames if f.endswith('.parquet')])
+        for ds_name in tqdm(parquet_files):
+            input_path = os.path.join(dirpath, ds_name)
+            rel_name = os.path.relpath(input_path, root_dir)
+            logger.info(f"Processing: {rel_name}")
+            
+            df = pd.read_parquet(input_path)
         
         # Tokenize queries
         df = tokenizer.parallelize_tokenization(
@@ -257,7 +254,8 @@ def tokenize_dataset(
             df[f'negative_{i}_input_ids'] = df[f'negative_{i}'].map(df_tmp['input_ids'])
         
         # Save tokenized data
-        output_path = os.path.join(output_dir, ds_name)
+        output_path = os.path.join(output_dir, rel_name)
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
         df.to_parquet(output_path, index=False)
         logger.info(f"Saved tokenized data to {output_path}")
 

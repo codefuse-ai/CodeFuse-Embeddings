@@ -137,7 +137,7 @@ Note: All examples above use open models; no HF token required.
 ## Model Registry
 
 Access model information programmatically:
-
+```
 ```python
 from model_registry import get_registry
 
