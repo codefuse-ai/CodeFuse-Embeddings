@@ -1,0 +1,21 @@
+{
+  "model_path": "bert-base-uncased",
+  "experiment_id": "demo-ga",
+  "output_dir": "output",
+  "tb_dir": "output/tb",
+  "cache_dir": "cache",
+  "train_data_path": "training_data/data_tokenized", 
+  "train_batch_size": 2,
+  "max_seq_length": 128,
+  "learning_rate": 1e-4,
+  "min_lr": 1e-6,
+  "weight_decay": 1e-2,
+  "warmup_steps": 10,
+  "num_hard_neg": 1,
+  "train_steps": -1,
+  "train_epochs": 1,
+  "log_interval": 2,
+  "checkpointing_steps": 0,
+  "validation_steps": 1000000,
+  "gradient_accumulation_steps": 8
+}

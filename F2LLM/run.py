@@ -115,7 +115,10 @@ class MultiLoader:
 # determine training steps
 override_train_step = False
 if args.train_steps < 0:
-    args.train_steps = sum(len(v) for v in train_loaders.values()) * args.train_epochs
+    # interpret train_steps as optimization steps (after accumulation)
+    total_micro_batches = sum(len(v) for v in train_loaders.values()) * args.train_epochs
+    accum = max(1, getattr(args, 'gradient_accumulation_steps', 1))
+    args.train_steps = total_micro_batches // accum
     override_train_step = True
 
 accelerator.print(f"******************************** Training step before prepare: {args.train_steps} ********************************")
@@ -145,7 +148,9 @@ for k, v in valid_loaders.items():
 
 # if training on multiple GPUs, length of dataloader would have changed
 if override_train_step:
-    args.train_steps = len(train_dataloader) * args.train_epochs
+    total_micro_batches = len(train_dataloader) * args.train_epochs
+    accum = max(1, getattr(args, 'gradient_accumulation_steps', 1))
+    args.train_steps = total_micro_batches // accum
 accelerator.print(f"******************************** Training step after prepare: {args.train_steps} ********************************")
 
 

@@ -137,6 +137,8 @@ def accelerate_train(args,
     criterion = CrossEntropyLoss(reduction='none')
     pbar = tqdm(range(args.train_steps), disable=not accelerator.is_local_main_process)
     completed_steps = 0
+    accumulation_steps = max(1, getattr(args, 'gradient_accumulation_steps', 1))
+    local_accum_counter = 0
     loss_dict = {ds_name: torch.tensor(0.0, device=model.lm.device) for ds_name in RETRIEVAL_DATASETS}
     loss_hard_dict = {ds_name: torch.tensor(0.0, device=model.lm.device) for ds_name in train_dataloader.loader_dict.keys()}
     count_dict = {ds_name: torch.tensor(0, device=model.lm.device) for ds_name in RETRIEVAL_DATASETS}
@@ -164,19 +166,26 @@ def accelerate_train(args,
                 loss = 0.0
             
             loss_total = loss + loss_hard
+            # scale loss for gradient accumulation
+            loss_total = loss_total / accumulation_steps
 
             # backward, optimizer, scheduler
             accelerator.backward(loss_total)
-            optimizer.step()
-            lr_scheduler.step()
-            optimizer.zero_grad()
-            if optimizer.param_groups[0]['lr'] < args.min_lr:
-                for i in range(len(optimizer.param_groups)):
-                    optimizer.param_groups[i]['lr'] = args.min_lr
-            
-            # log
-            completed_steps += 1
-            if completed_steps % args.log_interval == 0:
+            local_accum_counter += 1
+            stepped = False
+            if local_accum_counter % accumulation_steps == 0:
+                optimizer.step()
+                lr_scheduler.step()
+                optimizer.zero_grad()
+                stepped = True
+                if optimizer.param_groups[0]['lr'] < args.min_lr:
+                    for i in range(len(optimizer.param_groups)):
+                        optimizer.param_groups[i]['lr'] = args.min_lr
+
+            # log only on optimization steps
+            if stepped:
+                completed_steps += 1
+            if completed_steps % args.log_interval == 0 and completed_steps > 0:
                 pbar.update(args.log_interval)
 
                 train_log_dict = {"lr": optimizer.param_groups[0]['lr']}
@@ -202,13 +211,13 @@ def accelerate_train(args,
                 count_hard_dict = {ds_name: torch.tensor(0, device=model.lm.device) for ds_name in train_dataloader.loader_dict.keys()}
 
             # validation
-            if completed_steps % args.validation_steps == 0:
+            if completed_steps % args.validation_steps == 0 and completed_steps > 0:
                 model.lm.eval()
                 validate(args, accelerator, model, valid_loader_dict, criterion, completed_steps, summary_writer)
                 model.lm.train()
 
             # step checkpoint
-            if args.checkpointing_steps and completed_steps % args.checkpointing_steps == 0:
+            if args.checkpointing_steps and completed_steps > 0 and completed_steps % args.checkpointing_steps == 0:
                 output_dir = os.path.join(args.output_dir, f"step_{completed_steps}")
                 save_checkpoint(args, accelerator, model, output_dir, lr_scheduler)
 

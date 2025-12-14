@@ -21,6 +21,8 @@ class Args:
     warmup_steps: int = 100
     # embedding-related settings
     num_hard_neg: int = 7
+    # gradient accumulation to simulate larger effective batch size
+    gradient_accumulation_steps: int = 1
     # train steps take precedence over epochs, set to -1 to disable
     train_steps: int = -1
     train_epochs: int = 5
