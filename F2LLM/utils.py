@@ -21,13 +21,22 @@ def save_checkpoint(args, accelerator, model, output_dir, lr_scheduler):
     
     if accelerator.is_main_process:
         model.tokenizer.save_pretrained(output_dir)
+    
     unwrapped_model = accelerator.unwrap_model(model.lm)
-    unwrapped_model.save_pretrained(
-        output_dir,
-        is_main_process=accelerator.is_main_process,
-        save_function=accelerator.save,
-        state_dict=accelerator.get_state_dict(model.lm), # this is required for zero 3
-    )
+    
+    # For LoRA models, save only LoRA weights
+    if hasattr(unwrapped_model, 'is_peft_model') and unwrapped_model.is_peft_model:
+        accelerator.print("Saving LoRA adapter weights...")
+        unwrapped_model.save_pretrained(output_dir)
+    else:
+        # For full models, save the complete model
+        unwrapped_model.save_pretrained(
+            output_dir,
+            is_main_process=accelerator.is_main_process,
+            save_function=accelerator.save,
+            state_dict=accelerator.get_state_dict(model.lm), # this is required for zero 3
+        )
+    
     accelerator.wait_for_everyone()
 
 

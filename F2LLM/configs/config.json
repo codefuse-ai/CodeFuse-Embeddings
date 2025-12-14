@@ -1,5 +1,5 @@
 {
-  "model_path": "models/qwen3-4b",
+  "model_path": "Qwen/Qwen2.5-3B",
   "experiment_id": "4b+lr.8e-6+bs.16x32+context.1024+2epochs",
   "train_data_path": "training_data/data_tokenized_qwen",
   "output_dir": "output",

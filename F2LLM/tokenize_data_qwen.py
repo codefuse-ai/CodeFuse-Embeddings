@@ -5,8 +5,9 @@ import os
 from transformers import AutoTokenizer
 from tqdm.auto import tqdm
 
-
-tokenizer = AutoTokenizer.from_pretrained('models/qwen3-0.6b')
+# Use Hugging Face model identifier directly
+# Options: 'Qwen/Qwen2.5-0.5B', 'Qwen/Qwen2-0.5B', or local path if downloaded
+tokenizer = AutoTokenizer.from_pretrained('Qwen/Qwen2.5-0.5B')
 max_seq_length = 1023
 
 

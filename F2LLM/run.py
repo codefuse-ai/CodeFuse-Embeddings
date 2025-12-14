@@ -5,6 +5,7 @@ from transformers import (
     set_seed,
     get_scheduler
 )
+from lora_config import LoRAConfig
 import os, json, random
 from datasets import load_dataset
 from torch.utils.data import DataLoader
@@ -119,7 +120,23 @@ if args.train_steps < 0:
     override_train_step = True
 
 accelerator.print(f"******************************** Training step before prepare: {args.train_steps} ********************************")
-model = F2LLM(args.model_path, args.max_seq_length, args=args)
+
+# Prepare LoRA configuration if enabled
+lora_config = None
+if args.use_lora:
+    lora_config = LoRAConfig(
+        r=args.lora_r,
+        lora_alpha=args.lora_alpha,
+        lora_dropout=args.lora_dropout,
+        target_modules=args.lora_target_modules,
+    )
+    accelerator.print("LoRA enabled with configuration:")
+    accelerator.print(f"  - Rank (r): {args.lora_r}")
+    accelerator.print(f"  - Alpha: {args.lora_alpha}")
+    accelerator.print(f"  - Dropout: {args.lora_dropout}")
+    accelerator.print(f"  - Target modules: {args.lora_target_modules}")
+
+model = F2LLM(args.model_path, args.max_seq_length, args=args, use_lora=args.use_lora, lora_config=lora_config)
 model.lm.gradient_checkpointing_enable()
 # set seed again to make sure that different models share the same seed
 set_seed(0)
