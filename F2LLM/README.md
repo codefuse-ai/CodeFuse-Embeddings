@@ -30,6 +30,15 @@ In this repo we provide a streamlined and efficient script for training embeddin
 - Modify model path, data path, and other arguments in `configs/config.json`.
 - Start training with `accelerate launch --config_file configs/accelerate_config.yaml run.py --config configs/config.json`.
 
+### Matryoshka Representation Learning (MRL)
+
+MRL lets one model serve multiple embedding dimensions (e.g., 64/128/256/512/1024) so you can pick the size that matches each downstream task or budget.
+
+- Enable in config: set `use_mrl`: true, `mrl_dimensions`: [64, 128, 256, 512, 1024], and optionally `mrl_temperature` (default 0.05).
+- Training: the main contrastive losses stay the same; an auxiliary MRL loss is added over the truncated prefix dimensions.
+- Inference: compute the full embedding once and slice the first `k` dimensions to get a smaller embedding without retraining.
+- Quick check: run `python test_mrl.py` to validate the MRL loss and slicing behavior without needing real data.
+
 Note: we recommend setting `num_processes` to 1 in `configs/accelerate_config.yaml` and launch the training code once to generate cache for training data before starting the actual training.
 
 For multi-node training, run on the main node:

@@ -15,6 +15,59 @@ def write_tensorboard(summary_writer: SummaryWriter, log_dict: dict, completed_s
         summary_writer.add_scalar(key, value, completed_steps)
 
 
+def matryoshka_loss(embeddings, mrl_dimensions, temperature=0.05):
+    """
+    Compute Matryoshka Representation Learning (MRL) loss.
+    This loss encourages the model to produce high-quality embeddings at multiple dimensions.
+    
+    Args:
+        embeddings: [batch_size, embedding_dim] - normalized embeddings
+        mrl_dimensions: list of dimensions to apply MRL loss (e.g., [64, 128, 256, 512])
+        temperature: temperature for contrastive loss
+    
+    Returns:
+        mrl_loss: scalar loss value
+    """
+    if mrl_dimensions is None or len(mrl_dimensions) == 0:
+        return 0.0
+    
+    # Sort dimensions to ensure we start from smallest
+    sorted_dims = sorted(mrl_dimensions)
+    full_dim = embeddings.size(-1)
+    
+    # Make sure all dimensions are valid
+    sorted_dims = [d for d in sorted_dims if d <= full_dim and d > 0]
+    if not sorted_dims:
+        return 0.0
+    
+    mrl_loss = 0.0
+    num_dims = len(sorted_dims)
+    batch_size = embeddings.size(0)
+    
+    # For each dimension, compute contrastive loss
+    for i, dim in enumerate(sorted_dims):
+        # Truncate embeddings to this dimension
+        truncated = embeddings[:, :dim]
+        
+        # Normalize
+        truncated_norm = F.normalize(truncated, p=2, dim=-1)
+        
+        # Compute similarity matrix
+        similarity = torch.matmul(truncated_norm, truncated_norm.t()) / temperature
+        
+        # Create labels (diagonal = positive pairs)
+        labels = torch.arange(batch_size, device=embeddings.device)
+        
+        # Compute cross-entropy loss
+        loss = F.cross_entropy(similarity, labels)
+        
+        # Weight loss - larger dimensions get more weight
+        weight = (i + 1) / num_dims
+        mrl_loss = mrl_loss + weight * loss
+    
+    return mrl_loss / num_dims
+
+
 def save_checkpoint(args, accelerator, model, output_dir, lr_scheduler):
     accelerator.wait_for_everyone()
     accelerator.print(f"Saving checkpoint to {output_dir}")
@@ -37,6 +90,8 @@ def inbatch_loss(
         criterion,
         accelerator,
         temperature=0.05,
+        mrl_dimensions=None,
+        use_mrl=False,
     ):
     
     bs = query_embeddings.size(0)
@@ -52,6 +107,11 @@ def inbatch_loss(
     loss_bs = criterion(student_logits, labels) # (bs)
 
     loss = loss_bs.mean()
+    
+    # Add MRL loss if enabled
+    if use_mrl and mrl_dimensions:
+        mrl_loss = matryoshka_loss(a_norm, mrl_dimensions, temperature)
+        loss = loss + mrl_loss
 
     return loss
 
@@ -62,6 +122,8 @@ def hard_loss(
         criterion,
         accelerator,
         temperature=0.05,
+        mrl_dimensions=None,
+        use_mrl=False,
     ):
 
     if hard_neg_embeddings is None:
@@ -79,6 +141,11 @@ def hard_loss(
     logits = (a_norm.unsqueeze(1) * hard_norm).sum(-1) / temperature # [bs, num_hard+1]
 
     loss_hard = criterion(logits, torch.zeros((bs), dtype=torch.long, device=logits.device)).mean()
+    
+    # Add MRL loss if enabled
+    if use_mrl and mrl_dimensions:
+        mrl_loss = matryoshka_loss(a_norm, mrl_dimensions, temperature)
+        loss_hard = loss_hard + mrl_loss
 
     return loss_hard
 
@@ -90,10 +157,10 @@ def validate(args, accelerator, model, valid_loader_dict, criterion, completed_s
         for batch in valid_dataloader:
             with torch.no_grad():
                 outputs = model.forward(batch)
-                loss_hard = hard_loss(outputs['query_passage_features'].squeeze(1), outputs['passage_passage_features'].squeeze(1), outputs['negative_passage_features'], criterion, accelerator)
+                loss_hard = hard_loss(outputs['query_passage_features'].squeeze(1), outputs['passage_passage_features'].squeeze(1), outputs['negative_passage_features'], criterion, accelerator, mrl_dimensions=args.mrl_dimensions, use_mrl=args.use_mrl)
                 loss_hard_ls.append(accelerator.gather(loss_hard).float())
                 if dataset_name in RETRIEVAL_DATASETS:
-                    loss = inbatch_loss(outputs['query_passage_features'].squeeze(1), outputs['passage_passage_features'].squeeze(1), criterion, accelerator)
+                    loss = inbatch_loss(outputs['query_passage_features'].squeeze(1), outputs['passage_passage_features'].squeeze(1), criterion, accelerator, mrl_dimensions=args.mrl_dimensions, use_mrl=args.use_mrl)
                     loss_ls.append(accelerator.gather(loss).float())
         
         accelerator.wait_for_everyone()
@@ -152,12 +219,12 @@ def accelerate_train(args,
             # passage features: [bs, 1, d]
             # hard_neg_features: [bs, num_hard_neg, d]
 
-            loss_hard = hard_loss(outputs['query_passage_features'].squeeze(1), outputs['passage_passage_features'].squeeze(1), outputs['negative_passage_features'], criterion, accelerator)
+            loss_hard = hard_loss(outputs['query_passage_features'].squeeze(1), outputs['passage_passage_features'].squeeze(1), outputs['negative_passage_features'], criterion, accelerator, mrl_dimensions=args.mrl_dimensions, use_mrl=args.use_mrl)
             dataset_name = batch['dataset_name']
             count_hard_dict[dataset_name] += 1
             loss_hard_dict[dataset_name] += loss_hard.detach().float()
             if dataset_name in RETRIEVAL_DATASETS:
-                loss = inbatch_loss(outputs['query_passage_features'].squeeze(1), outputs['passage_passage_features'].squeeze(1), criterion, accelerator)
+                loss = inbatch_loss(outputs['query_passage_features'].squeeze(1), outputs['passage_passage_features'].squeeze(1), criterion, accelerator, mrl_dimensions=args.mrl_dimensions, use_mrl=args.use_mrl)
                 count_dict[dataset_name] += 1
                 loss_dict[dataset_name] += loss.detach().float()
             else:
