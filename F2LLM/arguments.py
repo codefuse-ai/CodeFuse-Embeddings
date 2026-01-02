@@ -19,6 +19,10 @@ class Args:
     min_lr: float = 1e-6
     weight_decay: float = 1e-2
     warmup_steps: int = 100
+    # model architecture: 'decoder' (default) or 'encoder'
+    model_arch: str = "decoder"
+    # pooling strategy for embedding: 'last_token' (decoder), 'cls' or 'mean' (encoder)
+    pooling: str = "last_token"
     # embedding-related settings
     num_hard_neg: int = 7
     # train steps take precedence over epochs, set to -1 to disable

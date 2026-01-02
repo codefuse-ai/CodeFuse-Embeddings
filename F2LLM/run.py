@@ -3,7 +3,8 @@ from utils import accelerate_train, CLASSIFICATION_DATASETS
 from transformers import (
     AutoTokenizer,
     set_seed,
-    get_scheduler
+    get_scheduler,
+    AutoConfig
 )
 import os, json, random
 from datasets import load_dataset
@@ -21,6 +22,17 @@ args = parse_args()
 accelerator = Accelerator()
 args.num_processes = accelerator.num_processes
 accelerator.print(args)
+
+# Detect architecture and normalize tokenizer padding
+config = AutoConfig.from_pretrained(args.model_path)
+encoder_archs = ['BertModel', 'RobertaModel', 'DebertaModel', 'ElectraModel', 'AlbertModel', 'DistilBertModel']
+detected_encoder = any(arch in getattr(config, 'architectures', []) for arch in encoder_archs)
+if args.model_arch:
+    is_encoder_only = args.model_arch.lower() == "encoder"
+else:
+    is_encoder_only = detected_encoder
+args.model_arch = "encoder" if is_encoder_only else "decoder"
+accelerator.print(f"Model architecture: {'encoder' if is_encoder_only else 'decoder'} | Pooling: {args.pooling}")
 
 def _stack(input_ids, max_len):
     data = [ids[:max_len] for ids in input_ids]     # input_ids: list of lists
@@ -72,6 +84,14 @@ with accelerator.main_process_first():
         valid_datasets.append((dataset_name, dataset['test']))
 
 tokenizer = AutoTokenizer.from_pretrained(args.model_path)
+if tokenizer.pad_token_id is None:
+    if tokenizer.eos_token_id is not None:
+        tokenizer.pad_token = tokenizer.eos_token
+    elif getattr(tokenizer, 'unk_token', None):
+        tokenizer.pad_token = tokenizer.unk_token
+    else:
+        tokenizer.add_special_tokens({'pad_token': '[PAD]'} )
+tokenizer.padding_side = 'right'
 
 train_loaders = {
     name: DataLoader(ds, shuffle=True, batch_size=args.train_batch_size, collate_fn=collate_fn)
