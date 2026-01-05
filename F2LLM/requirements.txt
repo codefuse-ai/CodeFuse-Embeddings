@@ -1,7 +1,15 @@
-accelerate
-datasets
-deepspeed
-flash-attn
-torch
-transformers
-tensorboard
+accelerate>=1.0.0
+datasets>=2.18.0
+transformers>=4.51.0
+huggingface_hub>=0.34.0,<1.0
+tensorboard>=2.12.0
+
+# PyTorch: install a suitable build for your platform first if needed.
+# On macOS (CPU/MPS), install torch separately before this file:
+#   pip install --upgrade pip setuptools wheel
+#   pip install torch torchvision torchaudio
+torch>=2.2.0
+
+# Linux-only optional accelerators (skipped on macOS/Windows)
+deepspeed; platform_system == "Linux" and platform_machine == "x86_64"
+flash-attn>=2.4.2; platform_system == "Linux" and platform_machine == "x86_64" and python_version >= "3.10"

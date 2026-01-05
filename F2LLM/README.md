@@ -22,13 +22,38 @@ Training data is available at [F2LLM data](https://huggingface.co/datasets/codef
 
 ### Train
 
-In this repo we provide a streamlined and efficient script for training embedding models. To reproduce the training of F2LLMs, please:
+In this repo we provide a streamlined and efficient script for training embedding models. The framework now supports **13 popular base models** across 6 different families (Qwen3, LLaMA 2/3, Mistral, Phi, Code-LLaMA, and Gemma).
 
-- Setup environment following `requirements.txt`. We note that transformers>=4.51.0 is required for training Qwen3 models.
-- Download data and backbone models from Hugging Face (we use Qwen3 models).
-- Run `tokenize_data_qwen.py` to tokenize the downloaded data
-- Modify model path, data path, and other arguments in `configs/config.json`.
-- Start training with `accelerate launch --config_file configs/accelerate_config.yaml run.py --config configs/config.json`.
+#### Quick Start with Different Models
+
+```python
+from model import F2LLM
+
+# Load any of 13 supported models
+model = F2LLM('meta-llama/Llama-2-7b', model_id='llama-2-7b')
+model = F2LLM('mistralai/Mistral-7B-v0.1', model_id='mistral-7b')
+model = F2LLM('microsoft/Phi-3-mini-4k-instruct', model_id='phi-3-mini')
+model = F2LLM('meta-llama/CodeLlama-7b', model_id='code-llama-7b')
+```
+
+#### Training Steps
+
+To train embedding models with any supported base model:
+
+- Setup environment following `requirements.txt`. We note that transformers>=4.51.0 is required.
+- Download data and backbone models from Hugging Face.
+- Run `tokenize_data_generic.py` to tokenize data for any model (replaces `tokenize_data_qwen.py`):
+  ```bash
+  python tokenize_data_generic.py \
+    --model_path meta-llama/Llama-2-7b \
+    --model_id llama-2-7b \
+    --root_dir training_data \
+    --output_dir data_tokenized \
+    --hf_token "$HF_TOKEN"   # optional; required for gated models
+  ```
+  If you encounter a 401/GatedRepoError, login with `huggingface-cli login` or set `export HF_TOKEN=hf_xxx`. Alternatively, try an open model such as `mistralai/Mistral-7B-v0.1` or `microsoft/Phi-3-mini-4k-instruct`.
+- Choose a model configuration from `configs/` (e.g., `llama2-7b.json`, `mistral-7b.json`, `phi3-mini.json`)
+- Start training with `accelerate launch --config_file configs/accelerate_config.yaml run.py --config configs/llama2-7b.json`.
 
 Note: we recommend setting `num_processes` to 1 in `configs/accelerate_config.yaml` and launch the training code once to generate cache for training data before starting the actual training.
 
