@@ -42,6 +42,61 @@ where N_NODE is the number of machines; N_PROCESSES is N_NODE\*8; MASTER_IP is t
 
 On worker nodes, also run the above commmand but modify `machine_rank` accordingly.
 
+### Train with LoRA
+
+For efficient fine-tuning with reduced computational costs, we support **LoRA (Low-Rank Adaptation)** via PEFT (Parameter-Efficient Fine-Tuning). LoRA allows you to adapt base models with minimal parameter updates, making it ideal for resource-constrained environments.
+
+#### LoRA Configuration
+
+Add the following parameters to `configs/config.json` to enable LoRA training:
+
+```json
+{
+  "use_lora": true,
+  "lora_r": 16,
+  "lora_alpha": 32,
+  "lora_dropout": 0.05,
+  "lora_target_modules": ["q_proj", "v_proj", "k_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+}
+```
+
+#### LoRA Parameters Explanation
+
+- `use_lora` (bool): Enable LoRA fine-tuning. Default: `false`
+- `lora_r` (int): LoRA rank (lower values = more efficient, typically 8-32). Default: `16`
+- `lora_alpha` (int): LoRA scaling factor. Typically set to 2× `lora_r`. Default: `32`
+- `lora_dropout` (float): Dropout probability for LoRA layers. Default: `0.05`
+- `lora_target_modules` (list): Transformer modules to apply LoRA to. Default targets query, key, value, output projections and feed-forward gates.
+
+#### LoRA Training Example
+
+```bash
+# Start LoRA training with the same command
+accelerate launch --config_file configs/accelerate_config.yaml run.py --config configs/config.json
+```
+
+#### LoRA Training Benefits
+
+- **Parameter Efficiency**: Only ~1-5% of original model parameters are trainable
+- **Reduced Memory**: Significantly lower GPU memory requirements
+- **Faster Training**: Quicker convergence due to fewer parameters
+- **Portable Adapters**: Save only LoRA weights (~10-100MB) instead of full models
+- **Composability**: Combine multiple LoRA adapters for different tasks
+
+#### Loading LoRA Fine-tuned Models
+
+```python
+from peft import AutoPeftModelForCausalLM
+from transformers import AutoTokenizer
+
+# Load the base model and LoRA adapters
+model = AutoPeftModelForCausalLM.from_pretrained("path/to/lora/checkpoint")
+tokenizer = AutoTokenizer.from_pretrained("path/to/lora/checkpoint")
+
+# For inference, convert to single model file (optional)
+model = model.merge_and_unload()
+```
+
 ### Citation
 
 If you use the F2LLM models, data, or code, please cite the following technical report.
