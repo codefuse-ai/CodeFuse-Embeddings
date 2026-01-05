@@ -21,6 +21,10 @@ class Args:
     warmup_steps: int = 100
     # embedding-related settings
     num_hard_neg: int = 7
+    # Matryoshka Representation Learning (MRL) settings
+    use_mrl: bool = False
+    mrl_dimensions: list = None  # e.g., [64, 128, 256, 512, 1024]
+    mrl_temperature: float = 0.05
     # train steps take precedence over epochs, set to -1 to disable
     train_steps: int = -1
     train_epochs: int = 5
