@@ -2,6 +2,7 @@ from arguments import parse_args
 from utils import accelerate_train, CLASSIFICATION_DATASETS
 from transformers import (
     AutoTokenizer,
+    AutoConfig,
     set_seed,
     get_scheduler
 )
@@ -21,6 +22,10 @@ args = parse_args()
 accelerator = Accelerator()
 args.num_processes = accelerator.num_processes
 accelerator.print(args)
+
+# Load model config to determine if it's encoder-only
+model_config = AutoConfig.from_pretrained(args.model_path)
+is_encoder_only = any(arch in model_config.architectures for arch in ['BertModel', 'RobertaModel', 'DebertaModel', 'ElectraModel', 'AlbertModel', 'DistilBertModel'])
 
 def _stack(input_ids, max_len):
     data = [ids[:max_len] for ids in input_ids]     # input_ids: list of lists
