@@ -27,20 +27,41 @@ In this repo we provide a streamlined and efficient script for training embeddin
 - Setup environment following `requirements.txt`. We note that transformers>=4.51.0 is required for training Qwen3 models.
 - Download data and backbone models from Hugging Face (we use Qwen3 models).
 - Run `tokenize_data_qwen.py` to tokenize the downloaded data
-- Modify model path, data path, and other arguments in `configs/config.json`.
+- Modify model path, data path, and other arguments in `configs/config.json`. Note that you can configure gradient accumulation using the `gradient_accumulation_steps` parameter to enable training with larger effective batch sizes on resource-constrained hardware.
 - Start training with `accelerate launch --config_file configs/accelerate_config.yaml run.py --config configs/config.json`.
 
 Note: we recommend setting `num_processes` to 1 in `configs/accelerate_config.yaml` and launch the training code once to generate cache for training data before starting the actual training.
 
-For multi-node training, run on the main node:
+### Gradient Accumulation
 
+The training script supports gradient accumulation to enable training with larger effective batch sizes on resource-constrained hardware. This feature allows users to simulate large batch training by accumulating gradients over multiple smaller batches before performing optimization steps. Configure gradient accumulation by setting the `gradient_accumulation_steps` parameter in your config file - the default value is 1 (no accumulation). For example, with `train_batch_size=8` and `gradient_accumulation_steps=4`, the effective batch size becomes 32.
+
+### Distributed Training Options
+
+We support multiple distributed training frameworks:
+
+#### Hugging Face Accelerate
+```bash
+accelerate launch --config_file configs/accelerate_config.yaml run.py --config configs/config.json
+```
+
+For multi-node training with Accelerate, run on the main node:
 ```
 accelerate launch --config_file configs/accelerate_config.yaml --num_machines N_NODE --num_processes N_PROCESSES --machine_rank 0 --main_process_ip MASTER_IP --main_process_port MASTER_PORT run.py --config configs/config.json
 ```
 
-where N_NODE is the number of machines; N_PROCESSES is N_NODE\*8; MASTER_IP is the IP address of your master node, and MASTER_PORT is a port available on your machine (e.g. 6379).
+where N_NODE is the number of machines; N_PROCESSES is N_NODE*8; MASTER_IP is the IP address of your master node, and MASTER_PORT is a port available on your machine (e.g. 6379).
 
 On worker nodes, also run the above commmand but modify `machine_rank` accordingly.
+
+#### Ray Distributed Training (NEW!)
+For scalable, fault-tolerant training across multiple nodes and GPUs, use our new Ray integration:
+
+```bash
+python ray_distributed_run.py --config configs/ray_config.json --num_workers 4 --num_gpus_per_worker 1.0
+```
+
+See [RAY_TRAINING.md](RAY_TRAINING.md) for detailed Ray training documentation.
 
 ### Citation
 

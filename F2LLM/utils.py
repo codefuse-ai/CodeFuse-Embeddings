@@ -124,7 +124,8 @@ def accelerate_train(args,
     accelerator.print(f" Num train samples = {num_train_samples}")
     accelerator.print(f" Num epochs = {args.train_epochs}")
     accelerator.print(f" Per device batch size = {args.train_batch_size}")
-    accelerator.print(f" Global batch size = {args.train_batch_size * accelerator.num_processes}")
+    accelerator.print(f" Gradient accumulation steps = {args.gradient_accumulation_steps}")
+    accelerator.print(f" Global batch size = {args.train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps}")
     accelerator.print(f" Step per epoch = {len(train_dataloader)}")
     accelerator.print(f" Total training steps = {args.train_steps}")
     accelerator.print("************************************************************************************************")
@@ -165,14 +166,20 @@ def accelerate_train(args,
             
             loss_total = loss + loss_hard
 
-            # backward, optimizer, scheduler
+            # Scale loss by gradient accumulation steps to maintain same effective learning rate
+            loss_total = loss_total / args.gradient_accumulation_steps
+
+            # backward
             accelerator.backward(loss_total)
-            optimizer.step()
-            lr_scheduler.step()
-            optimizer.zero_grad()
-            if optimizer.param_groups[0]['lr'] < args.min_lr:
-                for i in range(len(optimizer.param_groups)):
-                    optimizer.param_groups[i]['lr'] = args.min_lr
+            
+            # Update step only after gradient_accumulation_steps
+            if (completed_steps + 1) % args.gradient_accumulation_steps == 0 or (completed_steps + 1) == args.train_steps:
+                optimizer.step()
+                lr_scheduler.step()
+                optimizer.zero_grad()
+                if optimizer.param_groups[0]['lr'] < args.min_lr:
+                    for i in range(len(optimizer.param_groups)):
+                        optimizer.param_groups[i]['lr'] = args.min_lr
             
             # log
             completed_steps += 1
@@ -180,14 +187,15 @@ def accelerate_train(args,
                 pbar.update(args.log_interval)
 
                 train_log_dict = {"lr": optimizer.param_groups[0]['lr']}
+                # Scale losses back by gradient accumulation steps for logging
                 for k in loss_dict.keys():
                     count = accelerator.gather(count_dict[k]).sum()
                     if count > 0:
-                        train_log_dict[f"{k}/training_loss_in_batch"] = accelerator.gather(loss_dict[k]).sum() / count
+                        train_log_dict[f"{k}/training_loss_in_batch"] = (accelerator.gather(loss_dict[k]).sum() / count) * args.gradient_accumulation_steps
                 for k in loss_hard_dict.keys():
                     count = accelerator.gather(count_hard_dict[k]).sum()
                     if count > 0:
-                        train_log_dict[f"{k}/training_loss_hard"] = accelerator.gather(loss_hard_dict[k]).sum() / count
+                        train_log_dict[f"{k}/training_loss_hard"] = (accelerator.gather(loss_hard_dict[k]).sum() / count) * args.gradient_accumulation_steps
                 train_log_dict['Avg/retrieval/training_loss_in_batch'] = torch.tensor([v for k, v in train_log_dict.items() if k.split('/')[0] in RETRIEVAL_DATASETS and k.endswith('training_loss_in_batch')]).mean()
                 train_log_dict['Avg/retrieval/training_loss_hard'] = torch.tensor([v for k, v in train_log_dict.items() if k.split('/')[0] in RETRIEVAL_DATASETS and k.endswith('training_loss_hard')]).mean()
                 train_log_dict['Avg/classification/training_loss_hard'] = torch.tensor([v for k, v in train_log_dict.items() if k.split('/')[0] in CLASSIFICATION_DATASETS]).mean()

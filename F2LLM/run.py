@@ -136,7 +136,9 @@ lr_scheduler = get_scheduler("cosine",
                             num_warmup_steps=args.warmup_steps,
                             num_training_steps=args.train_steps)
 
-AcceleratorState().deepspeed_plugin.deepspeed_config['train_micro_batch_size_per_gpu'] = args.train_batch_size
+if AcceleratorState().deepspeed_plugin is not None:
+    AcceleratorState().deepspeed_plugin.deepspeed_config['train_micro_batch_size_per_gpu'] = args.train_batch_size
+    AcceleratorState().deepspeed_plugin.deepspeed_config['gradient_accumulation_steps'] = args.gradient_accumulation_steps
 model.lm, optimizer, lr_scheduler = accelerator.prepare(
     model.lm, optimizer, lr_scheduler
 )
