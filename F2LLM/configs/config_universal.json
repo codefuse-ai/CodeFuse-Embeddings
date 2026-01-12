@@ -1,0 +1,32 @@
+{
+  "model_config": {
+    "model_type": "qwen",
+    "model_path": "models/qwen3-4b",
+    "model_params": {
+      "torch_dtype": "bfloat16",
+      "attn_implementation": "flash_attention_2",
+      "trust_remote_code": true
+    }
+  },
+  "tokenizer_config": {
+    "add_special_tokens": false,
+    "padding_side": "right",
+    "pad_token": null
+  },
+  "experiment_id": "4b+lr.8e-6+bs.16x32+context.1024+2epochs",
+  "train_data_path": "training_data/data_tokenized",
+  "output_dir": "output",
+  "tb_dir": "output/tb",
+  "cache_dir": "cache",
+  "train_batch_size": 16,
+  "checkpointing_steps": 5000,
+  "validation_steps": 5000,
+  "max_seq_length": 1024,
+  "learning_rate": 8e-6,
+  "min_lr": 1e-7,
+  "weight_decay": 0.01,
+  "warmup_steps": 500,
+  "train_epochs": 2,
+  "log_interval": 100,
+  "num_hard_neg": 7
+}

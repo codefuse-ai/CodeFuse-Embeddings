@@ -30,6 +30,13 @@ In this repo we provide a streamlined and efficient script for training embeddin
 - Modify model path, data path, and other arguments in `configs/config.json`.
 - Start training with `accelerate launch --config_file configs/accelerate_config.yaml run.py --config configs/config.json`.
 
+#### For More Decoder-Only Models
+- Setup environment following `requirements.txt`. We note that transformers>=4.51.0 is required for training decoder-only models.
+- Download data and backbone models from Hugging Face.
+- Run `tokenize_data_universal.py` with model path, tokenized data_dir to tokenize the downloaded data
+- Modify model path, train_data_path, and other arguments in `configs/config_universal.json`.
+- Start training with `accelerate launch --config_file configs/accelerate_config.yaml run.py --config configs/config_universal.json`.
+
 Note: we recommend setting `num_processes` to 1 in `configs/accelerate_config.yaml` and launch the training code once to generate cache for training data before starting the actual training.
 
 For multi-node training, run on the main node:

@@ -14,6 +14,7 @@ import torch
 from torch.nn.utils.rnn import pad_sequence
 from torch.optim import AdamW
 from model import F2LLM
+from model_factory import ModelFactory
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -71,7 +72,8 @@ with accelerator.main_process_first():
         train_datasets.append((dataset_name, dataset['train']))
         valid_datasets.append((dataset_name, dataset['test']))
 
-tokenizer = AutoTokenizer.from_pretrained(args.model_path)
+adapter = ModelFactory.create_adapter(args.model_path)
+tokenizer = adapter.load_tokenizer()
 
 train_loaders = {
     name: DataLoader(ds, shuffle=True, batch_size=args.train_batch_size, collate_fn=collate_fn)

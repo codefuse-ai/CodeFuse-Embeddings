@@ -1,5 +1,5 @@
 import torch
-from transformers import AutoModel, AutoTokenizer
+from model_factory import ModelFactory
 
 
 class F2LLM:
@@ -11,10 +11,15 @@ class F2LLM:
 
         self.args = args
         self.dtype = torch.bfloat16
-        self.device = None # set after accelerator.prepare
-        self.lm = AutoModel.from_pretrained(model_path, trust_remote_code=True, torch_dtype=self.dtype, attn_implementation='flash_attention_2')
+        self.device = None  # set after accelerator.prepare
+        
+        # Use model factory to create adapter
+        self.adapter = ModelFactory.create_adapter(model_path, max_seq_length, args)
+        
+        # Load model and tokenizer
+        self.lm = self.adapter.load_model()
         self.lm.config.use_cache = False
-        self.tokenizer = AutoTokenizer.from_pretrained(model_path)
+        self.tokenizer = self.adapter.load_tokenizer()
         self.max_seq_length = max_seq_length
 
     def set_device(self):
@@ -34,4 +39,3 @@ class F2LLM:
             'passage_passage_features': torch.stack([passage_features_all_tokens[i, [batch['seq_lens'][i]-1]] for i in range(bs, 2*bs)]),
             'negative_passage_features': None if num_hard_neg == 0 else torch.stack([passage_features_all_tokens[i, [batch['seq_lens'][i]-1]] for i in range(2*bs, len(batch['seq_lens']))]).view(bs, num_hard_neg, -1)
         }
-
