@@ -1,6 +1,44 @@
-## F2LLM
+# F2LLM
 
-F2LLMs (Foundation-to-Feature Large Language Models) are foundation models directly finetuned on 6 million high-quality query-document pairs, striking a strong balance between model size, training cost, and embedding performance:
+F2LLM is a framework for converting decoder-only LLMs to embedding models.
+
+## LoRA Support
+
+F2LLM now supports Low-Rank Adaptation (LoRA) for efficient fine-tuning. This allows you to adapt base models with minimal parameter updates, significantly reducing computational costs and memory requirements.
+
+### Features
+
+- Support for LoRA with configurable rank (r), alpha, and dropout
+- Target module selection for LoRA adaptation
+- Full compatibility with existing training and inference pipelines
+- Easy model merging capabilities
+
+### Configuration
+
+To enable LoRA, set `use_lora: true` in your configuration file and specify the LoRA parameters:
+
+- `use_lora`: Enable LoRA (boolean)
+- `lora_r`: LoRA attention dimension (int, default: 8)
+- `lora_alpha`: LoRA scaling factor (int, default: 16)
+- `lora_dropout`: Dropout probability for LoRA layers (float, default: 0.05)
+- `lora_target_modules`: Target modules for LoRA (string, default: "all-linear")
+
+### Example Configuration
+
+See `config_lora_example.json` for a complete example of using LoRA with F2LLM.
+
+### Usage
+
+1. Install the required dependencies: `pip install peft`
+2. Update your config file to enable LoRA
+3. Run training as usual: `python run.py --config your_config.json`
+
+### Benefits
+
+- **Memory Efficiency**: Only train a small subset of parameters
+- **Computational Efficiency**: Faster training and lower GPU memory usage
+- **Modularity**: Multiple adapters can be applied to the same base model
+- **Compatibility**: Seamless integration with existing F2LLM pipeline
 
 <p align="center">
     <img src="imgs/overview.png" width="700"/>

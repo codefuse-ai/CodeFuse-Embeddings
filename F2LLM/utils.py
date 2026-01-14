@@ -21,13 +21,31 @@ def save_checkpoint(args, accelerator, model, output_dir, lr_scheduler):
     
     if accelerator.is_main_process:
         model.tokenizer.save_pretrained(output_dir)
+    
     unwrapped_model = accelerator.unwrap_model(model.lm)
-    unwrapped_model.save_pretrained(
-        output_dir,
-        is_main_process=accelerator.is_main_process,
-        save_function=accelerator.save,
-        state_dict=accelerator.get_state_dict(model.lm), # this is required for zero 3
-    )
+    
+    # Handle LoRA-specific saving
+    if args.use_lora:
+        # For LoRA models, save both the base model and adapters
+        unwrapped_model.save_pretrained(
+            output_dir,
+            is_main_process=accelerator.is_main_process,
+            save_function=accelerator.save,
+            state_dict=accelerator.get_state_dict(model.lm), # this is required for zero 3
+        )
+        # Also save the base model config and tokenizer if not saved already
+        if accelerator.is_main_process:
+            from transformers import AutoConfig
+            config = AutoConfig.from_pretrained(args.model_path)
+            config.save_pretrained(output_dir)
+    else:
+        unwrapped_model.save_pretrained(
+            output_dir,
+            is_main_process=accelerator.is_main_process,
+            save_function=accelerator.save,
+            state_dict=accelerator.get_state_dict(model.lm), # this is required for zero 3
+        )
+    
     accelerator.wait_for_everyone()
 
 
