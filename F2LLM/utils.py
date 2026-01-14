@@ -5,9 +5,12 @@ import torch.nn.functional as F
 from torch.nn import CrossEntropyLoss
 import os
 
+from transformers import AutoConfig
+
 CLASSIFICATION_DATASETS = ['amazon_counterfactual', 'amazon_polarity', 'imdb', 'toxic_conversations', 'cola']
 CLUSTERING_DATASETS = ['amazon_reviews', 'banking77', 'emotion', 'mtop_intent', 'mtop_domain', 'massive_scenario', 'massive_intent', 'tweet_sentiment_extraction', 'arxiv_clustering_p2p', 'arxiv_clustering_s2s', 'biorxiv_clustering_p2p', 'biorxiv_clustering_s2s', 'medrxiv_clustering_p2p', 'medrxiv_clustering_s2s', 'reddit_clustering_p2p', 'reddit_clustering_s2s', 'stackexchange_clustering_p2p', 'stackexchange_clustering_s2s', 'twentynewsgroups']
 RETRIEVAL_DATASETS = ['arguana', 'snli', 'mnli', 'anli', 'paq', 'squad', 'stackexchange', 'msmarco', 'natural_questions', 'hotpotqa', 'fever', 'eli5', 'fiqa', 'bioasq', 'nfcorpus', 'miracl', 'mrtidy', 'scifact', 'qqp', 'stackoverflowdupquestions', 'sts12', 'sts22', 'stsbenchmark', 'amazon_qa', 'cnn_dm', 'coliee', 'paq_part2', 'pubmedqa', 's2orc_abstract_citation', 's2orc_title_abstract', 's2orc_title_citation', 'sentence_compression', 'specter', 'triviaqa', 'xsum', 'stackexchange_part2', 'stackexchangedupquestions_s2s', 'stackexchangedupquestions_p2p']
+ENCODER_ONLY_INDICATORS = ['bert', 'electra', 'mpnet']
 
 
 def write_tensorboard(summary_writer: SummaryWriter, log_dict: dict, completed_steps):
@@ -225,3 +228,69 @@ def accelerate_train(args,
     
     if summary_writer:
         summary_writer.close()
+
+
+def detect_model_type(model_path):
+    try:
+        config = AutoConfig.from_pretrained(model_path, trust_remote_code=True)
+    except Exception as e:
+        # If we can't load the config, default to decoder-only for backward compatibility
+        return 'decoder_only'
+    
+    model_name = model_path.split('/')[-1].lower()
+    
+    if any(indicator in model_name for indicator in ENCODER_ONLY_INDICATORS):
+        return 'encoder_only'
+
+    return 'decoder_only'
+
+
+def extract_cls_embeddings(batch_size, num_hard_neg, last_hidden_state, batch):
+    features = {}
+    features['query_passage_features'] = last_hidden_state[0:batch_size, 0, :].unsqueeze(1)
+    features['passage_passage_features'] = last_hidden_state[batch_size:2*batch_size, 0, :].unsqueeze(1)
+    features['negative_passage_features'] = (
+        last_hidden_state[2*batch_size:, 0, :].view(batch_size, num_hard_neg, -1)
+        if num_hard_neg > 0 else None
+    )
+    return features
+
+
+def extract_mean_pooling_embeddings(batch_size, num_hard_neg, last_hidden_state, batch):
+    # Apply mean pooling
+    attention_mask = batch['attention_mask']
+    input_mask_expanded = attention_mask.unsqueeze(-1).expand(last_hidden_state.size()).float()
+    sum_embeddings = torch.sum(last_hidden_state * input_mask_expanded, 1)
+    sum_mask = torch.clamp(input_mask_expanded.sum(1), min=1e-9)
+    mean_pooled = sum_embeddings / sum_mask
+    
+    # Extract features
+    features = {}
+    features['query_passage_features'] = mean_pooled[0:batch_size, :].unsqueeze(1)
+    features['passage_passage_features'] = mean_pooled[batch_size:2*batch_size, :].unsqueeze(1)
+    features['negative_passage_features'] = (
+        mean_pooled[2*batch_size:, :].view(batch_size, num_hard_neg, -1)
+        if num_hard_neg > 0 else None
+    )
+    
+    return features
+
+
+def extract_last_token_embeddings(batch_size, num_hard_neg, last_hidden_state, batch):        
+    # Extract features using the last token for each sequence
+    features = {}
+    features['query_passage_features'] = extract_last_token_features(last_hidden_state, batch, 0, batch_size)
+    features['passage_passage_features'] = extract_last_token_features(last_hidden_state, batch, batch_size, 2 * batch_size)
+    features['negative_passage_features'] = (
+        extract_last_token_features(last_hidden_state, batch, 2 * batch_size, len(batch['seq_lens'])).view(batch_size, num_hard_neg, -1)
+        if num_hard_neg != 0 else None
+    )
+    
+    return features
+
+
+def extract_last_token_features(hidden_states, batch, start_idx, end_idx):
+    return torch.stack([
+        hidden_states[i, [batch['seq_lens'][i] - 1]] 
+        for i in range(start_idx, end_idx)
+    ])

@@ -26,7 +26,7 @@ In this repo we provide a streamlined and efficient script for training embeddin
 
 - Setup environment following `requirements.txt`. We note that transformers>=4.51.0 is required for training Qwen3 models.
 - Download data and backbone models from Hugging Face (we use Qwen3 models).
-- Run `tokenize_data_qwen.py` to tokenize the downloaded data
+- Run `tokenize_data.py --tokenizer qwen` to tokenize the downloaded data
 - Modify model path, data path, and other arguments in `configs/config.json`.
 - Start training with `accelerate launch --config_file configs/accelerate_config.yaml run.py --config configs/config.json`.
 
