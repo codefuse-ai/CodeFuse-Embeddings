@@ -14,6 +14,7 @@
   "weight_decay": 0.01,
   "warmup_steps": 500,
   "train_epochs": 2,
+  "gradient_accumulation_steps": 4,
   "log_interval": 100,
   "num_hard_neg": 7
 }

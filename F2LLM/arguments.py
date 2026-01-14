@@ -29,6 +29,7 @@ class Args:
     validation_steps: int = 100
     # just placeholder, for logging purpose
     num_processes: int=0
+    gradient_accumulation_steps: int=4
 
     def dict(self):
         return asdict(self)
