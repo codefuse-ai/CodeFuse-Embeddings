@@ -126,6 +126,8 @@ model.lm.gradient_checkpointing_enable()
 # set seed again to make sure that different models share the same seed
 set_seed(0)
 
+if args.use_lora:
+    accelerator.print("Using LoRA training, optimizing only LoRA parameters")
 optimizer = AdamW(model.lm.parameters(),
                   weight_decay=args.weight_decay,
                   lr=args.learning_rate,

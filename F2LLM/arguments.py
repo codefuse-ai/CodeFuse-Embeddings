@@ -27,6 +27,12 @@ class Args:
     log_interval: int = 20
     checkpointing_steps: int = 100
     validation_steps: int = 100
+    # LoRA settings
+    use_lora: bool = False
+    lora_r: int = 8
+    lora_alpha: int = 32
+    lora_dropout: float = 0.1
+    lora_target_modules: str = "q_proj,v_proj"
     # just placeholder, for logging purpose
     num_processes: int=0
 

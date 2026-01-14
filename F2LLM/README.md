@@ -42,6 +42,28 @@ where N_NODE is the number of machines; N_PROCESSES is N_NODE\*8; MASTER_IP is t
 
 On worker nodes, also run the above commmand but modify `machine_rank` accordingly.
 
+### LoRA Training
+
+This repository now supports Parameter-Efficient Fine-Tuning (PEFT) using LoRA (Low-Rank Adaptation) to significantly reduce computational costs and memory usage during training.
+
+To use LoRA training:
+
+1. Add LoRA parameters to your config file (see `configs/config_lora.json` for an example):
+   ```json
+   {
+     "use_lora": true,
+     "lora_r": 8,
+     "lora_alpha": 32,
+     "lora_dropout": 0.1,
+     "lora_target_modules": "q_proj,v_proj"
+   }
+   ```
+
+2. Run training with the LoRA config:
+   ```
+   accelerate launch --config_file configs/accelerate_config.yaml run.py --config configs/config_lora.json
+   ```
+
 ### Citation
 
 If you use the F2LLM models, data, or code, please cite the following technical report.
