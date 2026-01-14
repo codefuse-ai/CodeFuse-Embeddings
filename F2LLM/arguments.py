@@ -28,6 +28,15 @@ class Args:
     checkpointing_steps: int = 100
     validation_steps: int = 100
     # just placeholder, for logging purpose
+
+    # LoRA-specific arguments
+    use_lora: bool = False
+    lora_r: int = 8
+    lora_alpha: int = 16
+    lora_dropout: float = 0.05
+    lora_target_modules: str = "q_proj"
+    #lora_target_modules: str = "all-linear"  # Comma-separated list or "all-linear"
+
     num_processes: int=0
 
     def dict(self):

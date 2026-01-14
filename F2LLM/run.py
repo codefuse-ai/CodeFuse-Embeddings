@@ -122,14 +122,26 @@ if args.train_steps < 0:
 
 accelerator.print(f"******************************** Training step before prepare: {args.train_steps} ********************************")
 model = F2LLM(args.model_path, args.max_seq_length, args=args)
-model.lm.gradient_checkpointing_enable()
+model.lm.gradient_checkpointing_enable(
+    gradient_checkpointing_kwargs={"use_reentrant": False} # key for loss error！
+)
 # set seed again to make sure that different models share the same seed
 set_seed(0)
 
-optimizer = AdamW(model.lm.parameters(),
-                  weight_decay=args.weight_decay,
-                  lr=args.learning_rate,
-                  betas=(0.9, 0.98))
+# Determine parameters for optimizer based on LoRA usage
+if args.use_lora:
+    # Only optimize LoRA parameters if LoRA is enabled
+    optimizer = AdamW(model.lm.parameters(),
+                      weight_decay=args.weight_decay,
+                      lr=args.learning_rate,
+                      betas=(0.9, 0.98))
+    accelerator.print(f"Using LoRA - optimizing {model.lm.num_parameters(only_trainable=True)} trainable parameters out of {model.lm.num_parameters()}")
+else:
+    # Optimize all model parameters
+    optimizer = AdamW(model.lm.parameters(),
+                      weight_decay=args.weight_decay,
+                      lr=args.learning_rate,
+                      betas=(0.9, 0.98))
 
 lr_scheduler = get_scheduler("cosine",
                             optimizer=optimizer,
