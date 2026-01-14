@@ -3,7 +3,158 @@ from torch.utils.tensorboard import SummaryWriter
 import torch
 import torch.nn.functional as F
 from torch.nn import CrossEntropyLoss
+import torch.distributed as dist
 import os
+
+
+class DistributedContext:
+    """
+    Distributed training context abstraction layer
+
+    Provides a unified API for both Accelerate and Ray Train backends,
+    enabling seamless switching between frameworks without code changes.
+    """
+
+    def __init__(self, backend='auto'):
+        """
+        Initialize distributed context
+
+        Args:
+            backend: 'auto' (auto-detect), 'accelerate', or 'ray'
+        """
+        self.backend = backend
+
+        if backend == 'auto':
+            self.backend = self._detect_backend()
+
+        if self.backend == 'ray':
+            self._init_ray()
+        elif self.backend == 'accelerate':
+            self._init_accelerate()
+        else:
+            raise ValueError(f"Unknown backend: {backend}")
+
+    def _detect_backend(self):
+        """Auto-detect which backend is being used"""
+        # Try Ray Train first
+        try:
+            import ray.train
+            ctx = ray.train.get_context()
+            if ctx is not None:
+                return 'ray'
+        except (ImportError, RuntimeError):
+            pass
+
+        # Fall back to Accelerate
+        try:
+            from accelerate import Accelerator
+            return 'accelerate'
+        except ImportError:
+            raise RuntimeError("Neither Ray Train nor Accelerate is available")
+
+    def _init_ray(self):
+        """Initialize Ray Train backend"""
+        import ray.train
+        self.ctx = ray.train.get_context()
+        self.rank = self.ctx.get_world_rank()
+        self.world_size = self.ctx.get_world_size()
+        self.local_rank = self.ctx.get_local_rank()
+
+    def _init_accelerate(self):
+        """Initialize Accelerate backend"""
+        from accelerate import Accelerator
+        self.accelerator = Accelerator()
+        self.rank = self.accelerator.process_index
+        self.world_size = self.accelerator.num_processes
+        self.local_rank = self.accelerator.local_process_index
+
+    def gather(self, tensor):
+        """
+        Gather tensors from all processes
+
+        Args:
+            tensor: Tensor to gather [local_bs, ...]
+
+        Returns:
+            Gathered tensor [world_size * local_bs, ...]
+        """
+        if self.backend == 'ray':
+            return self._ray_gather(tensor)
+        else:
+            return self.accelerator.gather(tensor)
+
+    def _ray_gather(self, tensor):
+        """Ray backend gather implementation using PyTorch distributed"""
+        if not dist.is_initialized():
+            return tensor
+
+        # Create list to hold gathered tensors
+        gathered_tensors = [torch.zeros_like(tensor) for _ in range(self.world_size)]
+
+        # Gather tensors from all processes
+        dist.all_gather(gathered_tensors, tensor)
+
+        # Concatenate along batch dimension
+        return torch.cat(gathered_tensors, dim=0)
+
+    def print(self, *args, **kwargs):
+        """Print only on main process"""
+        if self.is_main_process():
+            print(*args, **kwargs)
+
+    def is_main_process(self):
+        """Check if current process is main (rank 0)"""
+        return self.rank == 0
+
+    def is_local_main_process(self):
+        """Check if current process is local main"""
+        return self.local_rank == 0
+
+    def wait_for_everyone(self):
+        """Synchronization barrier across all processes"""
+        if self.backend == 'ray':
+            if dist.is_initialized():
+                dist.barrier()
+        else:
+            self.accelerator.wait_for_everyone()
+
+    def prepare(self, *args):
+        """
+        Prepare models, optimizers, dataloaders
+
+        For Accelerate: wraps with DDP/FSDP
+        For Ray: no-op (Ray Train handles this separately)
+        """
+        if self.backend == 'accelerate':
+            return self.accelerator.prepare(*args)
+        else:
+            # Ray Train handles preparation separately
+            return args if len(args) > 1 else args[0]
+
+    def unwrap_model(self, model):
+        """Unwrap model from DDP/FSDP wrapper"""
+        if self.backend == 'accelerate':
+            return self.accelerator.unwrap_model(model)
+        else:
+            # Ray Train uses DDP, unwrap if needed
+            if hasattr(model, 'module'):
+                return model.module
+            return model
+
+    def save(self, obj, f):
+        """Save object to file"""
+        if self.backend == 'accelerate':
+            self.accelerator.save(obj, f)
+        else:
+            torch.save(obj, f)
+
+    def get_state_dict(self, model):
+        """Get model state dictionary"""
+        if self.backend == 'accelerate':
+            return self.accelerator.get_state_dict(model)
+        else:
+            return self.unwrap_model(model).state_dict()
+
 
 CLASSIFICATION_DATASETS = ['amazon_counterfactual', 'amazon_polarity', 'imdb', 'toxic_conversations', 'cola']
 CLUSTERING_DATASETS = ['amazon_reviews', 'banking77', 'emotion', 'mtop_intent', 'mtop_domain', 'massive_scenario', 'massive_intent', 'tweet_sentiment_extraction', 'arxiv_clustering_p2p', 'arxiv_clustering_s2s', 'biorxiv_clustering_p2p', 'biorxiv_clustering_s2s', 'medrxiv_clustering_p2p', 'medrxiv_clustering_s2s', 'reddit_clustering_p2p', 'reddit_clustering_s2s', 'stackexchange_clustering_p2p', 'stackexchange_clustering_s2s', 'twentynewsgroups']

@@ -3,5 +3,9 @@ datasets
 deepspeed
 flash-attn
 torch
-transformers
+transformers>=4.51.0
 tensorboard
+
+# Ray distributed training (optional, for Ray Train support)
+ray[train]>=2.30.0
+pyyaml>=6.0
