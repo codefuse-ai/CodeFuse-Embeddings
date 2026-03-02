@@ -19,8 +19,13 @@ class Args:
     min_lr: float = 1e-6
     weight_decay: float = 1e-2
     warmup_steps: int = 100
+    # MRL
+    use_mrl: bool = False
+    # cosine or constant_with_warmup
+    scheduler_type: str = "cosine"
     # embedding-related settings
     num_hard_neg: int = 7
+    num_hard_neg_clustering: int = 9
     # train steps take precedence over epochs, set to -1 to disable
     train_steps: int = -1
     train_epochs: int = 5
@@ -43,4 +48,5 @@ def parse_args():
     args = Args(**config)
     args.output_dir = f"{args.output_dir}/{args.experiment_id}"
     args.tb_dir = f"{args.tb_dir}/{args.experiment_id}"
+    assert args.scheduler_type in ["cosine", "constant_with_warmup"], "unsupported scheduler"
     return args

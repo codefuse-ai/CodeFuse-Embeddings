@@ -1,5 +1,5 @@
 from arguments import parse_args
-from utils import accelerate_train, CLASSIFICATION_DATASETS
+from utils import accelerate_train, CLASSIFICATION_DATASETS, CLUSTERING_DATASETS
 from transformers import (
     AutoTokenizer,
     set_seed,
@@ -20,6 +20,7 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 args = parse_args()
 accelerator = Accelerator()
 args.num_processes = accelerator.num_processes
+args.warmup_steps = args.warmup_steps * args.num_processes
 accelerator.print(args)
 
 def _stack(input_ids, max_len):
@@ -29,6 +30,9 @@ def _stack(input_ids, max_len):
     tensor = torch.tensor(sum(data, []))            # (total_tokens,)
     return tensor.split(lens)                       # list of 1-d tensors
 
+def get_corpus_ids(doc_id):
+    idx = id_to_docs[doc_id]
+    return corpus[idx]['input_ids']
 
 def collate_fn(batch_raw):
     '''
@@ -38,14 +42,14 @@ def collate_fn(batch_raw):
         2*bs - 2*bs+num_hard_neg-1: hard neg for sample 1
         2*bs+num_hard_neg*(i-1) - 2*bs+num_hard_neg*i-1: hard neg for sample i (i from 1 to bs)
     '''
-    num_hard_neg = 1 if batch_raw[0]['dataset_name'] in CLASSIFICATION_DATASETS else args.num_hard_neg
-    # select args.num_hard_neg hard negatives from a total of 24
+    num_hard_neg = 1 if batch_raw[0]['dataset_name'] in CLASSIFICATION_DATASETS else (args.num_hard_neg_clustering if batch_raw[0]['dataset_name'] in CLUSTERING_DATASETS else args.num_hard_neg)
+    # 从24个hardneg中随机选args.num_hard_neg个
     hard_neg_indices = [0] if num_hard_neg == 1 else random.sample(list(range(24)), num_hard_neg)
     input_ids = _stack(
         [s['query_input_ids'] for s in batch_raw]+\
-        [s['passage_input_ids'] for s in batch_raw]+\
-        [s[f'negative_{i+1}_input_ids'] for s in batch_raw for i in hard_neg_indices],
-        args.max_seq_length
+        [get_corpus_ids(s['passage_input_ids']) for s in batch_raw]+\
+        [get_corpus_ids(s[f'negative_{i+1}_input_ids']) for s in batch_raw for i in hard_neg_indices],
+        args.max_seq_length,
     )
     seqlens = torch.tensor([ids.size(0) for ids in input_ids])
     # pad input ids to [bs, max_len]
@@ -61,15 +65,25 @@ if accelerator.is_main_process:
     with open(os.path.join(args.output_dir, "args.json"), "w") as f:   
         json.dump(args.dict(), f, indent=2)
 
+print(accelerator.process_index, "starting to load data", flush=True)
 train_datasets, valid_datasets = [], []
-with accelerator.main_process_first():
+with accelerator.local_main_process_first():
     for f in sorted(os.listdir(args.train_data_path)):
-        dataset_name = f.split('.parquet')[0]
-        dataset = load_dataset("parquet", data_files=os.path.join(args.train_data_path, f), cache_dir=args.cache_dir)['train']
+        if not f.endswith('_query.parquet'):
+            continue
+        dataset_name = f.split('_query.parquet')[0]
+        dataset = load_dataset("parquet", data_files=os.path.join(args.train_data_path, f), cache_dir=args.cache_dir, keep_in_memory=True)['train']#.select(list(range(200))) # for debug
         dataset = dataset.add_column("dataset_name", [dataset_name]*len(dataset))
         dataset = dataset.train_test_split(train_size=0.99, shuffle=True, seed=0)
         train_datasets.append((dataset_name, dataset['train']))
         valid_datasets.append((dataset_name, dataset['test']))
+
+print(accelerator.process_index, "starting to load corpus", flush=True)
+with accelerator.local_main_process_first():
+    corpus = load_dataset("parquet", data_files=os.path.join(args.train_data_path, "corpus.parquet"), cache_dir=args.cache_dir)['train']#.to_pandas().set_index('doc_id')['input_ids'].to_dict()
+print(accelerator.process_index, "corpus loaded", flush=True)
+id_to_docs = {doc_id: i for i, doc_id in enumerate(corpus['doc_id'])}
+print(accelerator.process_index, "mapper constructed", flush=True)
 
 tokenizer = AutoTokenizer.from_pretrained(args.model_path)
 
@@ -121,26 +135,33 @@ if args.train_steps < 0:
     override_train_step = True
 
 accelerator.print(f"******************************** Training step before prepare: {args.train_steps} ********************************")
-model = F2LLM(args.model_path, args.max_seq_length, args=args)
+model = F2LLM(args.model_path, args.max_seq_length, args=args, accelerator=accelerator)
 model.lm.gradient_checkpointing_enable()
 # set seed again to make sure that different models share the same seed
 set_seed(0)
 
-optimizer = AdamW(model.lm.parameters(),
+param_groups = [
+    {
+        "params": list(model.lm.parameters()),
+        "lr": args.learning_rate,
+    },
+]
+
+optimizer = AdamW(param_groups,
                   weight_decay=args.weight_decay,
-                  lr=args.learning_rate,
                   betas=(0.9, 0.98))
 
-lr_scheduler = get_scheduler("cosine",
+lr_scheduler = get_scheduler(args.scheduler_type,
                             optimizer=optimizer,
                             num_warmup_steps=args.warmup_steps,
                             num_training_steps=args.train_steps)
 
 AcceleratorState().deepspeed_plugin.deepspeed_config['train_micro_batch_size_per_gpu'] = args.train_batch_size
-model.lm, optimizer, lr_scheduler = accelerator.prepare(
-    model.lm, optimizer, lr_scheduler
+model, optimizer, lr_scheduler = accelerator.prepare(
+    model, optimizer, lr_scheduler
 )
 model.set_device()
+print(accelerator.process_index, "model prepared", flush=True)
 train_dataloader = MultiLoader(train_loaders)
 for k, v in valid_loaders.items():
     valid_loaders[k] = accelerator.prepare(v)
