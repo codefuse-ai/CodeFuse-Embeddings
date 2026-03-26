@@ -1,7 +1,5 @@
 ## F2LLM
 
-🔥🔥 **F2LLM-v2 is coming very soon!**
-
 F2LLM-v2 is a new family of general-purpose, multilingual embedding models in 8 distinct sizes ranging from 80M to 14B. Trained on a newly curated composite of 60 million publicly available high-quality data, F2LLM-v2 supports more than 200 languages, with a particular emphasis on previously underserved mid- and low-resource languages.
 
 F2LLMs are fully open. Models, data, and intermediate checkpoints are available at:
@@ -45,7 +43,21 @@ On worker nodes, also run the above commmand but modify `machine_rank` according
 
 ### Citation
 
-If you use the F2LLM models, data, or code, please cite the following technical report.
+If you use the F2LLM models, data, or code, please cite the following technical reports.
+
+```
+@article{2026F2LLM-v2,
+  title={F2LLM-v2: Inclusive, Performant, and Efficient Embeddings for a Multilingual World}, 
+  author={Ziyin Zhang and Zihan Liao and Hang Yu and Peng Di and Rui Wang},
+  journal      = {CoRR},
+  volume       = {abs/2603.19223},
+  year         = {2026},
+  url          = {https://doi.org/10.48550/arXiv.2603.19223},
+  doi          = {10.48550/ARXIV.2603.19223},
+  eprinttype    = {arXiv},
+  eprint       = {2603.19223}
+}
+```
 
 ```
 @article{2025F2LLM,
