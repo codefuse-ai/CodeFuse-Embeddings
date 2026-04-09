@@ -83,7 +83,7 @@ def hard_loss(
     ):
 
     if hard_neg_embeddings is None:
-        return 0.0
+        return torch.tensor(0.0, device=query_embeddings.device)
 
     def _calculate_loss(q_emb, passage_emb):
         bs = q_emb.size(0)
