@@ -11,6 +11,7 @@ Embedding-related repos from CodeFuse, including:
 - [E2LLM](https://github.com/codefuse-ai/E2LLM)
 - [F2LLM](./F2LLM/README.md)
 - [ML-Embed](./ML-Embed/README.md)
+- [CoREB](https://github.com/hq-bench/coreb)
 
 **Star History**
 
